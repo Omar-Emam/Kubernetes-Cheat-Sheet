@@ -1,178 +1,272 @@
 # ☸️ Kubernetes Cheat Sheet
 
-A practical, copy-paste-ready reference for `kubectl` and the surrounding Kubernetes tooling (`kubeadm`, `crictl`, `etcdctl`, `helm`, `kustomize`).
+A practical, copy-paste-ready reference for `kubectl` and the surrounding Kubernetes tooling (`minikube`, `kubeadm`, `crictl`, `etcdctl`, `helm`, `kustomize`). Every command has a short description.
 
 > **Conventions used below**
 > `<pod>` = resource name · `-n <ns>` = namespace · `-A` = all namespaces · `-l` = label selector
-> Most `kubectl` commands accept `-n`, `-A`, `-o`, `-l`, `--context` — they are only repeated where it matters.
+> Most `kubectl` commands accept `-n`, `-A`, `-o`, `-l`, `--context`. They are only repeated where it matters.
 
 ---
 
 ## 📑 Table of Contents
 
 1. [Setup, Aliases & Autocompletion](#1-setup-aliases--autocompletion)
-2. [Kubeconfig, Contexts & Clusters](#2-kubeconfig-contexts--clusters)
-3. [Cluster Information](#3-cluster-information)
-4. [Resource Types & Short Names](#4-resource-types--short-names)
-5. [Viewing Resources (get / describe)](#5-viewing-resources-get--describe)
-6. [Output Formats, JSONPath & Custom Columns](#6-output-formats-jsonpath--custom-columns)
-7. [Creating Resources (Imperative)](#7-creating-resources-imperative)
-8. [Declarative Management (apply / diff)](#8-declarative-management-apply--diff)
-9. [Generating YAML (dry-run)](#9-generating-yaml-dry-run)
-10. [Updating Resources (edit / patch / set)](#10-updating-resources-edit--patch--set)
-11. [Deleting Resources](#11-deleting-resources)
-12. [Pods: Logs, Exec, Copy, Attach](#12-pods-logs-exec-copy-attach)
-13. [Deployments & Rollouts](#13-deployments--rollouts)
-14. [Scaling & Autoscaling](#14-scaling--autoscaling)
-15. [Services, Networking & Port Forwarding](#15-services-networking--port-forwarding)
-16. [ConfigMaps & Secrets](#16-configmaps--secrets)
-17. [Storage (PV / PVC / StorageClass)](#17-storage-pv--pvc--storageclass)
-18. [Jobs & CronJobs](#18-jobs--cronjobs)
-19. [Labels, Annotations & Selectors](#19-labels-annotations--selectors)
-20. [Namespaces](#20-namespaces)
-21. [Nodes: Cordon, Drain, Taints](#21-nodes-cordon-drain-taints)
-22. [RBAC, ServiceAccounts & Auth](#22-rbac-serviceaccounts--auth)
-23. [Resource Usage & Events](#23-resource-usage--events)
-24. [Debugging & Troubleshooting](#24-debugging--troubleshooting)
-25. [Waiting & Scripting](#25-waiting--scripting)
-26. [Kustomize](#26-kustomize)
-27. [Plugins & Krew](#27-plugins--krew)
-28. [kubeadm (Cluster Lifecycle)](#28-kubeadm-cluster-lifecycle)
-29. [etcd Backup & Restore](#29-etcd-backup--restore)
-30. [Container Runtime (crictl)](#30-container-runtime-crictl)
-31. [Node-level Troubleshooting](#31-node-level-troubleshooting)
-32. [Helm Essentials](#32-helm-essentials)
-33. [Global Flags Reference](#33-global-flags-reference)
-34. [Pod Phases & Common Errors](#34-pod-phases--common-errors)
-35. [YAML Skeletons](#35-yaml-skeletons)
+2. [Local Cluster with Minikube](#2-local-cluster-with-minikube)
+3. [Kubeconfig, Contexts & Clusters](#3-kubeconfig-contexts--clusters)
+4. [Cluster Information](#4-cluster-information)
+5. [Resource Types & Short Names](#5-resource-types--short-names)
+6. [Viewing Resources (get / describe)](#6-viewing-resources-get--describe)
+7. [Output Formats, JSONPath & Custom Columns](#7-output-formats-jsonpath--custom-columns)
+8. [Creating Resources (Imperative)](#8-creating-resources-imperative)
+9. [Declarative Management (apply / diff)](#9-declarative-management-apply--diff)
+10. [Generating YAML (dry-run)](#10-generating-yaml-dry-run)
+11. [Updating Resources (edit / patch / set)](#11-updating-resources-edit--patch--set)
+12. [Deleting Resources](#12-deleting-resources)
+13. [Pods: Logs, Exec, Copy, Attach](#13-pods-logs-exec-copy-attach)
+14. [Deployments & Rollouts](#14-deployments--rollouts)
+15. [Scaling & Autoscaling](#15-scaling--autoscaling)
+16. [Services, Networking & Port Forwarding](#16-services-networking--port-forwarding)
+17. [ConfigMaps & Secrets](#17-configmaps--secrets)
+18. [Storage (PV / PVC / StorageClass)](#18-storage-pv--pvc--storageclass)
+19. [Jobs & CronJobs](#19-jobs--cronjobs)
+20. [Labels, Annotations & Selectors](#20-labels-annotations--selectors)
+21. [Namespaces](#21-namespaces)
+22. [Nodes: Cordon, Drain, Taints](#22-nodes-cordon-drain-taints)
+23. [RBAC, ServiceAccounts & Auth](#23-rbac-serviceaccounts--auth)
+24. [Resource Usage & Events](#24-resource-usage--events)
+25. [Debugging & Troubleshooting](#25-debugging--troubleshooting)
+26. [Waiting & Scripting](#26-waiting--scripting)
+27. [Kustomize](#27-kustomize)
+28. [Plugins & Krew](#28-plugins--krew)
+29. [kubeadm (Cluster Lifecycle)](#29-kubeadm-cluster-lifecycle)
+30. [etcd Backup & Restore](#30-etcd-backup--restore)
+31. [Container Runtime (crictl)](#31-container-runtime-crictl)
+32. [Node-level Troubleshooting](#32-node-level-troubleshooting)
+33. [Helm Essentials](#33-helm-essentials)
+34. [Global Flags Reference](#34-global-flags-reference)
+35. [Pod Phases & Common Errors](#35-pod-phases--common-errors)
+36. [YAML Skeletons](#36-yaml-skeletons)
 
 ---
 
 ## 1. Setup, Aliases & Autocompletion
 
+Check your kubectl version and set up shortcuts that save a lot of typing.
+
 ```bash
 # Version
-kubectl version                          # client + server
-kubectl version --client
-kubectl version -o yaml
+kubectl version                          # Show client and server versions
+kubectl version --client                 # Show only the local kubectl version
+kubectl version -o yaml                  # Version details in YAML
 
 # Bash completion
-source <(kubectl completion bash)
-echo 'source <(kubectl completion bash)' >> ~/.bashrc
+source <(kubectl completion bash)                          # Enable completion in the current shell
+echo 'source <(kubectl completion bash)' >> ~/.bashrc      # Enable completion permanently
 
 # Zsh completion
-source <(kubectl completion zsh)
-echo 'source <(kubectl completion zsh)' >> ~/.zshrc
+source <(kubectl completion zsh)                           # Enable completion in the current shell
+echo 'source <(kubectl completion zsh)' >> ~/.zshrc        # Enable completion permanently
 
 # PowerShell completion
-kubectl completion powershell | Out-String | Invoke-Expression
+kubectl completion powershell | Out-String | Invoke-Expression   # Enable completion in PowerShell
 
 # Alias + completion for the alias
-alias k=kubectl
-complete -o default -F __start_kubectl k
+alias k=kubectl                                  # Short alias for kubectl
+complete -o default -F __start_kubectl k         # Make completion work with the alias
 
 # Handy exports
-export do="--dry-run=client -o yaml"     # k create deploy x --image=nginx $do
-export now="--force --grace-period=0"    # k delete pod x $now
+export do="--dry-run=client -o yaml"     # Usage: k create deploy x --image=nginx $do
+export now="--force --grace-period=0"    # Usage: k delete pod x $now
 ```
 
 **Popular aliases**
 
 ```bash
-alias kg='kubectl get'
-alias kd='kubectl describe'
-alias kdel='kubectl delete'
-alias kl='kubectl logs'
-alias kex='kubectl exec -it'
-alias kaf='kubectl apply -f'
-alias kgp='kubectl get pods'
-alias kgpa='kubectl get pods -A'
-alias kgs='kubectl get svc'
-alias kgn='kubectl get nodes -o wide'
-alias kns='kubectl config set-context --current --namespace'
+alias kg='kubectl get'                    # List resources
+alias kd='kubectl describe'               # Describe a resource
+alias kdel='kubectl delete'               # Delete a resource
+alias kl='kubectl logs'                   # Show logs
+alias kex='kubectl exec -it'              # Interactive exec into a pod
+alias kaf='kubectl apply -f'              # Apply a manifest
+alias kgp='kubectl get pods'              # List pods
+alias kgpa='kubectl get pods -A'          # List pods in all namespaces
+alias kgs='kubectl get svc'               # List services
+alias kgn='kubectl get nodes -o wide'     # List nodes with details
+alias kns='kubectl config set-context --current --namespace'   # Switch default namespace
 ```
 
 ---
 
-## 2. Kubeconfig, Contexts & Clusters
+## 2. Local Cluster with Minikube
+
+Minikube runs a local Kubernetes cluster on your machine, which is ideal for learning and testing.
 
 ```bash
-kubectl config view                                  # merged kubeconfig
-kubectl config view --minify                         # current context only
-kubectl config view --raw                            # include certs/secrets
-kubectl config view -o jsonpath='{.users[*].name}'
+# Install check
+minikube version                                  # Show the installed minikube version
 
-kubectl config get-contexts                          # list contexts
-kubectl config current-context
-kubectl config use-context <context>                 # switch context
-kubectl config rename-context <old> <new>
-kubectl config delete-context <context>
+# Create / start a cluster
+minikube start                                    # Start a cluster with default settings
+minikube start --driver=docker                    # Use Docker as the driver (also: hyperv, virtualbox, kvm2, podman)
+minikube start --cpus=4 --memory=8192             # Set CPU count and memory (MB)
+minikube start --disk-size=40g                    # Set the VM/container disk size
+minikube start --kubernetes-version=v1.31.0       # Run a specific Kubernetes version
+minikube start --nodes=3                          # Create a multi-node cluster
+minikube start -p dev                             # Create a separate cluster called "dev" (profile)
+minikube start --container-runtime=containerd     # Choose the runtime (docker, containerd, cri-o)
+minikube start --addons=ingress,metrics-server    # Enable addons at startup
 
-kubectl config get-clusters
-kubectl config get-users
-kubectl config delete-cluster <cluster>
-kubectl config delete-user <user>
+# Cluster lifecycle
+minikube status                                   # Show the state of the cluster components
+minikube stop                                     # Stop the cluster but keep its state
+minikube pause                                    # Pause Kubernetes without stopping the VM
+minikube unpause                                  # Resume a paused cluster
+minikube delete                                   # Delete the current cluster
+minikube delete -p dev                            # Delete a specific profile
+minikube delete --all                             # Delete every minikube cluster
+minikube delete --all --purge                     # Delete everything, including ~/.minikube
 
-# Set default namespace for current context
-kubectl config set-context --current --namespace=<ns>
+# Profiles (multiple clusters)
+minikube profile list                             # List all minikube clusters
+minikube profile dev                              # Switch the active profile to "dev"
+
+# Nodes
+minikube node list                                # List nodes in the cluster
+minikube node add                                 # Add a worker node
+minikube node delete <node>                       # Remove a node
+
+# Access & networking
+minikube ip                                       # Show the cluster IP address
+minikube ssh                                      # SSH into the minikube node
+minikube ssh -n <node>                            # SSH into a specific node
+minikube service <svc>                            # Open a service in the browser
+minikube service <svc> --url                      # Print the service URL instead of opening it
+minikube service list                             # List all services and their URLs
+minikube tunnel                                   # Expose LoadBalancer services (run in a separate terminal)
+minikube dashboard                                # Open the Kubernetes dashboard
+minikube dashboard --url                          # Print the dashboard URL only
+
+# Addons
+minikube addons list                              # Show all addons and whether they are enabled
+minikube addons enable ingress                    # Enable the NGINX ingress controller
+minikube addons enable metrics-server             # Enable metrics (needed for kubectl top / HPA)
+minikube addons enable dashboard                  # Enable the web dashboard
+minikube addons enable registry                   # Enable a local image registry
+minikube addons disable <addon>                   # Disable an addon
+minikube addons open <addon>                      # Open an addon's UI in the browser
+
+# Images
+minikube image ls                                 # List images inside the cluster
+minikube image load myapp:1.0                     # Copy a local image into the cluster
+minikube image build -t myapp:1.0 .               # Build an image directly inside the cluster
+minikube image rm myapp:1.0                       # Remove an image from the cluster
+eval $(minikube docker-env)                       # Point your Docker CLI at minikube's Docker daemon
+eval $(minikube docker-env -u)                    # Point Docker back to your local daemon
+minikube docker-env --shell powershell | Invoke-Expression   # Same as above, for PowerShell
+
+# Files & kubectl
+minikube mount ./data:/data                       # Mount a local folder into the node
+minikube cp ./file.txt /home/docker/file.txt      # Copy a file into the node
+minikube kubectl -- get pods                      # Use minikube's bundled kubectl
+minikube update-context                           # Fix kubeconfig if the cluster IP changed
+
+# Config & troubleshooting
+minikube config set driver docker                 # Set the default driver
+minikube config set memory 8192                   # Set default memory for new clusters
+minikube config set cpus 4                        # Set default CPUs for new clusters
+minikube config view                              # Show saved minikube settings
+minikube logs                                     # Show cluster logs
+minikube logs -f                                  # Follow cluster logs
+minikube logs --file=logs.txt                     # Save logs to a file (useful for bug reports)
+```
+
+> 💡 With the Docker driver on Windows/macOS, `NodePort` services are not reachable on `minikube ip`. Use `minikube service <svc> --url` or `kubectl port-forward` instead.
+
+---
+
+## 3. Kubeconfig, Contexts & Clusters
+
+Kubeconfig tells kubectl which cluster to talk to and as which user. A context ties a cluster, user and namespace together.
+
+```bash
+kubectl config view                                  # Show the merged kubeconfig
+kubectl config view --minify                         # Show only the current context
+kubectl config view --raw                            # Show including certs and tokens
+kubectl config view -o jsonpath='{.users[*].name}'   # List user names from kubeconfig
+
+kubectl config get-contexts                          # List all contexts
+kubectl config current-context                       # Show the active context
+kubectl config use-context <context>                 # Switch to another context
+kubectl config rename-context <old> <new>            # Rename a context
+kubectl config delete-context <context>              # Remove a context
+
+kubectl config get-clusters                          # List clusters in kubeconfig
+kubectl config get-users                             # List users in kubeconfig
+kubectl config delete-cluster <cluster>              # Remove a cluster entry
+kubectl config delete-user <user>                    # Remove a user entry
+
+kubectl config set-context --current --namespace=<ns>   # Change the default namespace
 
 # Build a context manually
-kubectl config set-cluster <cluster> --server=https://<ip>:6443 --certificate-authority=ca.crt --embed-certs
-kubectl config set-credentials <user> --client-certificate=user.crt --client-key=user.key --embed-certs
-kubectl config set-credentials <user> --token=<token>
-kubectl config set-context <ctx> --cluster=<cluster> --user=<user> --namespace=<ns>
+kubectl config set-cluster <cluster> --server=https://<ip>:6443 --certificate-authority=ca.crt --embed-certs   # Add a cluster
+kubectl config set-credentials <user> --client-certificate=user.crt --client-key=user.key --embed-certs      # Add a cert-based user
+kubectl config set-credentials <user> --token=<token>                                                         # Add a token-based user
+kubectl config set-context <ctx> --cluster=<cluster> --user=<user> --namespace=<ns>                          # Create a context
 
-# Unset values
-kubectl config unset users.<user>
+kubectl config unset users.<user>                    # Remove a specific kubeconfig value
 
 # Use multiple kubeconfig files
-export KUBECONFIG=~/.kube/config:~/.kube/cluster2.yaml
-kubectl config view --flatten > ~/.kube/merged.yaml
+export KUBECONFIG=~/.kube/config:~/.kube/cluster2.yaml       # Merge several kubeconfig files
+kubectl config view --flatten > ~/.kube/merged.yaml          # Save merged config into one file
 
 # Per-command overrides
-kubectl get pods --kubeconfig=./other.yaml
-kubectl get pods --context=<ctx>
+kubectl get pods --kubeconfig=./other.yaml           # Use a different kubeconfig file once
+kubectl get pods --context=<ctx>                     # Use a different context once
 
 # Cloud provider kubeconfig
-az aks get-credentials -g <rg> -n <cluster>          # AKS
-az aks get-credentials -g <rg> -n <cluster> --admin
-aws eks update-kubeconfig --region <region> --name <cluster>   # EKS
-gcloud container clusters get-credentials <cluster> --region <region>  # GKE
+az aks get-credentials -g <rg> -n <cluster>                          # Get AKS credentials
+az aks get-credentials -g <rg> -n <cluster> --admin                  # Get AKS admin credentials
+aws eks update-kubeconfig --region <region> --name <cluster>         # Get EKS credentials
+gcloud container clusters get-credentials <cluster> --region <region> # Get GKE credentials
 ```
 
 ---
 
-## 3. Cluster Information
+## 4. Cluster Information
+
+Inspect the cluster itself: API endpoints, health, available APIs and resource documentation.
 
 ```bash
-kubectl cluster-info
-kubectl cluster-info dump                            # large debug dump
-kubectl cluster-info dump --output-directory=./dump
+kubectl cluster-info                                 # Show control plane and DNS addresses
+kubectl cluster-info dump                            # Dump full cluster state for debugging
+kubectl cluster-info dump --output-directory=./dump  # Save the dump to a folder
 
-kubectl get nodes
-kubectl get nodes -o wide
-kubectl get --raw='/readyz?verbose'                  # API server health
-kubectl get --raw='/livez?verbose'
-kubectl get --raw /metrics | head
-kubectl get componentstatuses                        # deprecated, may still work
+kubectl get nodes                                    # List nodes and their status
+kubectl get nodes -o wide                            # Nodes with IPs, OS, kernel, runtime
+kubectl get --raw='/readyz?verbose'                  # API server readiness checks
+kubectl get --raw='/livez?verbose'                   # API server liveness checks
+kubectl get --raw /metrics | head                    # Raw API server metrics
+kubectl get componentstatuses                        # Control-plane component health (deprecated)
 
-kubectl api-versions                                 # all API groups/versions
-kubectl api-resources                                # all resource kinds
-kubectl api-resources --namespaced=true
-kubectl api-resources --namespaced=false
-kubectl api-resources --api-group=apps
-kubectl api-resources -o wide                        # shows verbs
-kubectl api-resources --verbs=list,get
+kubectl api-versions                                 # List all API group versions
+kubectl api-resources                                # List all resource kinds
+kubectl api-resources --namespaced=true              # Only namespaced resources
+kubectl api-resources --namespaced=false             # Only cluster-scoped resources
+kubectl api-resources --api-group=apps               # Resources in a specific API group
+kubectl api-resources -o wide                        # Include supported verbs
+kubectl api-resources --verbs=list,get               # Resources that support these verbs
 
-kubectl explain pod                                  # schema docs
-kubectl explain pod.spec.containers
-kubectl explain deployment.spec.strategy --recursive
-kubectl explain pods --api-version=v1
+kubectl explain pod                                  # Built-in docs for a resource
+kubectl explain pod.spec.containers                  # Docs for a nested field
+kubectl explain deployment.spec.strategy --recursive # Show all nested fields
+kubectl explain pods --api-version=v1                # Docs for a specific API version
 ```
 
 ---
 
-## 4. Resource Types & Short Names
+## 5. Resource Types & Short Names
+
+Short names let you type `po` instead of `pods`, `svc` instead of `services`, and so on.
 
 | Resource | Short | Resource | Short |
 |---|---|---|---|
@@ -194,53 +288,57 @@ kubectl explain pods --api-version=v1
 | roles / rolebindings | — | clusterroles / clusterrolebindings | — |
 
 ```bash
-kubectl get all                # pods, svc, deploy, rs, sts, ds, jobs, cj, hpa (NOT cm/secrets/pvc/ing)
-kubectl get all -A
-kubectl get cm,secret,pvc,ing -n <ns>
+kubectl get all                     # Common workload resources (not cm/secrets/pvc/ingress)
+kubectl get all -A                  # Same, across all namespaces
+kubectl get cm,secret,pvc,ing -n <ns>   # Resources that "get all" leaves out
 ```
 
 ---
 
-## 5. Viewing Resources (get / describe)
+## 6. Viewing Resources (get / describe)
+
+`get` lists resources in a table; `describe` shows full details and recent events.
 
 ```bash
-kubectl get pods
-kubectl get pods -A                                  # all namespaces
-kubectl get pods -n <ns>
-kubectl get pods -o wide                             # node, IP, nominated node
-kubectl get pods --show-labels
-kubectl get pods -L app,tier                         # labels as columns
-kubectl get pods -l app=web                          # label selector
-kubectl get pods -l 'env in (prod,staging)'
-kubectl get pods -l 'app,!canary'
-kubectl get pods --field-selector status.phase=Running
-kubectl get pods --field-selector spec.nodeName=<node>
-kubectl get pods --field-selector metadata.namespace!=default
-kubectl get pods --sort-by=.metadata.creationTimestamp
-kubectl get pods --sort-by='.status.containerStatuses[0].restartCount'
-kubectl get pods -w                                  # watch
-kubectl get pods --watch-only
-kubectl get pods --no-headers
-kubectl get pods <pod1> <pod2>
-kubectl get deploy,svc,pods                          # multiple kinds
-kubectl get pod <pod> -o yaml                        # full manifest
-kubectl get pod <pod> -o yaml --show-managed-fields=false
-kubectl get pods --chunk-size=500                    # page large lists
-kubectl get pods --ignore-not-found
-kubectl get -f manifest.yaml                         # resources defined in a file
-kubectl get -k ./overlay                             # resources from kustomization
+kubectl get pods                                     # List pods in the current namespace
+kubectl get pods -A                                  # List pods in all namespaces
+kubectl get pods -n <ns>                             # List pods in a specific namespace
+kubectl get pods -o wide                             # Include node, pod IP and more
+kubectl get pods --show-labels                       # Show all labels
+kubectl get pods -L app,tier                         # Show specific labels as columns
+kubectl get pods -l app=web                          # Filter by label
+kubectl get pods -l 'env in (prod,staging)'          # Filter by a set of label values
+kubectl get pods -l 'app,!canary'                    # Has "app", does not have "canary"
+kubectl get pods --field-selector status.phase=Running        # Filter by a field value
+kubectl get pods --field-selector spec.nodeName=<node>        # Pods on a specific node
+kubectl get pods --field-selector metadata.namespace!=default # Exclude a namespace
+kubectl get pods --sort-by=.metadata.creationTimestamp        # Sort by age
+kubectl get pods --sort-by='.status.containerStatuses[0].restartCount'   # Sort by restarts
+kubectl get pods -w                                  # Watch for changes live
+kubectl get pods --watch-only                        # Watch changes without initial list
+kubectl get pods --no-headers                        # Omit the header row
+kubectl get pods <pod1> <pod2>                       # Get specific pods
+kubectl get deploy,svc,pods                          # Several kinds at once
+kubectl get pod <pod> -o yaml                        # Full object as YAML
+kubectl get pod <pod> -o yaml --show-managed-fields=false   # YAML without managedFields noise
+kubectl get pods --chunk-size=500                    # Page through very large lists
+kubectl get pods --ignore-not-found                  # Do not error if missing
+kubectl get -f manifest.yaml                         # Get resources defined in a file
+kubectl get -k ./overlay                             # Get resources from a kustomization
 
-kubectl describe pod <pod>
-kubectl describe pods -l app=web
-kubectl describe node <node>
-kubectl describe deploy <deploy>
-kubectl describe -f manifest.yaml
-kubectl describe pod <pod> --show-events=false
+kubectl describe pod <pod>                           # Details and events for a pod
+kubectl describe pods -l app=web                     # Describe all matching pods
+kubectl describe node <node>                         # Node capacity, conditions, pods
+kubectl describe deploy <deploy>                     # Deployment strategy, replicas, events
+kubectl describe -f manifest.yaml                    # Describe resources in a file
+kubectl describe pod <pod> --show-events=false       # Describe without events
 ```
 
 ---
 
-## 6. Output Formats, JSONPath & Custom Columns
+## 7. Output Formats, JSONPath & Custom Columns
+
+Control the output with `-o` and extract exactly the fields you need.
 
 | Flag | Description |
 |---|---|
@@ -255,78 +353,79 @@ kubectl describe pod <pod> --show-events=false
 
 ```bash
 # JSONPath
-kubectl get pods -o jsonpath='{.items[*].metadata.name}'
-kubectl get pod <pod> -o jsonpath='{.status.podIP}'
-kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}'
-kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.nodeName}{"\n"}{end}'
-kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u
-kubectl get secret <s> -o jsonpath='{.data.password}' | base64 -d
-kubectl get pods -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}'
+kubectl get pods -o jsonpath='{.items[*].metadata.name}'          # All pod names
+kubectl get pod <pod> -o jsonpath='{.status.podIP}'                # A pod's IP
+kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}'   # Node internal IPs
+kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.nodeName}{"\n"}{end}'   # Pod → node, one per line
+kubectl get pods -o jsonpath='{.items[*].spec.containers[*].image}' | tr ' ' '\n' | sort -u        # Unique images
+kubectl get secret <s> -o jsonpath='{.data.password}' | base64 -d                                  # Decode a secret value
+kubectl get pods -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}'                # Only running pods
 
 # Custom columns
-kubectl get pods -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,IP:.status.podIP
-kubectl get pods -o custom-columns='NAME:.metadata.name,IMAGES:.spec.containers[*].image'
-kubectl get nodes -o custom-columns=NODE:.metadata.name,CPU:.status.capacity.cpu,MEM:.status.capacity.memory
+kubectl get pods -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,IP:.status.podIP        # Name, node, IP table
+kubectl get pods -o custom-columns='NAME:.metadata.name,IMAGES:.spec.containers[*].image'         # Pod and its images
+kubectl get nodes -o custom-columns=NODE:.metadata.name,CPU:.status.capacity.cpu,MEM:.status.capacity.memory   # Node capacity
 
 # Go template
-kubectl get pods -o go-template='{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}'
+kubectl get pods -o go-template='{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}'   # Pod names with Go template
 
 # With jq
-kubectl get pods -o json | jq -r '.items[] | select(.status.phase!="Running") | .metadata.name'
+kubectl get pods -o json | jq -r '.items[] | select(.status.phase!="Running") | .metadata.name'   # Non-running pods
 ```
 
 ---
 
-## 7. Creating Resources (Imperative)
+## 8. Creating Resources (Imperative)
+
+Create resources directly from the command line without writing YAML first.
 
 ```bash
 # Pods
-kubectl run nginx --image=nginx
-kubectl run nginx --image=nginx --port=80 --labels=app=web,tier=fe
-kubectl run nginx --image=nginx --env=KEY=value --env=FOO=bar
-kubectl run nginx --image=nginx --restart=Never              # plain pod
-kubectl run tmp --image=busybox --rm -it --restart=Never -- sh   # throwaway shell
-kubectl run nginx --image=nginx --expose --port=80           # pod + ClusterIP svc
-kubectl run nginx --image=nginx --command -- sleep 3600      # override command
-kubectl run nginx --image=nginx -- arg1 arg2                 # override args
-kubectl run nginx --image=nginx --requests='cpu=100m,memory=128Mi'   # removed in newer versions; use YAML
-kubectl run nginx --image=nginx --overrides='{"spec":{"nodeName":"node1"}}'
+kubectl run nginx --image=nginx                              # Run a single pod
+kubectl run nginx --image=nginx --port=80 --labels=app=web,tier=fe   # Pod with port and labels
+kubectl run nginx --image=nginx --env=KEY=value --env=FOO=bar        # Pod with env variables
+kubectl run nginx --image=nginx --restart=Never              # Plain pod, no restarts
+kubectl run tmp --image=busybox --rm -it --restart=Never -- sh   # Throwaway shell, deleted on exit
+kubectl run nginx --image=nginx --expose --port=80           # Pod plus a ClusterIP service
+kubectl run nginx --image=nginx --command -- sleep 3600      # Override the container command
+kubectl run nginx --image=nginx -- arg1 arg2                 # Override the container args
+kubectl run nginx --image=nginx --overrides='{"spec":{"nodeName":"node1"}}'   # Inject raw JSON into the spec
 
 # Deployments
-kubectl create deployment web --image=nginx
-kubectl create deployment web --image=nginx --replicas=3 --port=80
-kubectl create deployment web --image=nginx --image=redis      # multi-container
+kubectl create deployment web --image=nginx                  # Create a deployment
+kubectl create deployment web --image=nginx --replicas=3 --port=80   # With replicas and port
+kubectl create deployment web --image=nginx --image=redis    # Multi-container deployment
 
 # Services
-kubectl expose deployment web --port=80 --target-port=8080
-kubectl expose deployment web --type=NodePort --port=80
-kubectl expose deployment web --type=LoadBalancer --port=80 --name=web-lb
-kubectl expose pod nginx --port=80 --name=nginx-svc
-kubectl create service clusterip my-svc --tcp=80:8080
-kubectl create service nodeport my-svc --tcp=80:8080 --node-port=30080
-kubectl create service loadbalancer my-svc --tcp=80:8080
-kubectl create service externalname my-svc --external-name=example.com
+kubectl expose deployment web --port=80 --target-port=8080   # ClusterIP service for a deployment
+kubectl expose deployment web --type=NodePort --port=80      # Expose on every node's port
+kubectl expose deployment web --type=LoadBalancer --port=80 --name=web-lb   # Cloud load balancer
+kubectl expose pod nginx --port=80 --name=nginx-svc          # Service for a single pod
+kubectl create service clusterip my-svc --tcp=80:8080        # Standalone ClusterIP service
+kubectl create service nodeport my-svc --tcp=80:8080 --node-port=30080   # NodePort with fixed port
+kubectl create service loadbalancer my-svc --tcp=80:8080     # LoadBalancer service
+kubectl create service externalname my-svc --external-name=example.com   # DNS alias to external host
 
 # Other kinds
-kubectl create namespace dev
-kubectl create configmap app-cfg --from-literal=KEY=value
-kubectl create secret generic db --from-literal=password=s3cr3t
-kubectl create job pi --image=perl -- perl -Mbignum=bpi -wle 'print bpi(2000)'
-kubectl create job manual-run --from=cronjob/<cj>
-kubectl create cronjob backup --image=busybox --schedule="0 2 * * *" -- /bin/sh -c 'date'
-kubectl create serviceaccount app-sa
-kubectl create quota team-q --hard=cpu=4,memory=8Gi,pods=20
-kubectl create priorityclass high --value=1000 --description="high prio"
-kubectl create poddisruptionbudget web-pdb --selector=app=web --min-available=2
-kubectl create ingress web --class=nginx --rule="example.com/*=web:80"
-kubectl create ingress web --rule="example.com/api*=api:8080,tls=my-tls-secret"
-kubectl create token <sa> --duration=1h                      # short-lived SA token
+kubectl create namespace dev                                 # Create a namespace
+kubectl create configmap app-cfg --from-literal=KEY=value    # Create a ConfigMap
+kubectl create secret generic db --from-literal=password=s3cr3t   # Create a Secret
+kubectl create job pi --image=perl -- perl -Mbignum=bpi -wle 'print bpi(2000)'   # Run a one-off job
+kubectl create job manual-run --from=cronjob/<cj>            # Run a CronJob immediately
+kubectl create cronjob backup --image=busybox --schedule="0 2 * * *" -- /bin/sh -c 'date'   # Scheduled job
+kubectl create serviceaccount app-sa                         # Create a service account
+kubectl create quota team-q --hard=cpu=4,memory=8Gi,pods=20  # Limit namespace resources
+kubectl create priorityclass high --value=1000 --description="high prio"   # Pod scheduling priority
+kubectl create poddisruptionbudget web-pdb --selector=app=web --min-available=2   # Protect during drains
+kubectl create ingress web --class=nginx --rule="example.com/*=web:80"            # HTTP ingress rule
+kubectl create ingress web --rule="example.com/api*=api:8080,tls=my-tls-secret"   # Ingress with TLS
+kubectl create token <sa> --duration=1h                      # Short-lived token for a service account
 
 # From files
-kubectl create -f manifest.yaml
-kubectl create -f ./dir/
-kubectl create -f https://example.com/manifest.yaml
-kubectl create -f - <<EOF
+kubectl create -f manifest.yaml                              # Create from a file
+kubectl create -f ./dir/                                     # Create from all files in a folder
+kubectl create -f https://example.com/manifest.yaml          # Create from a URL
+kubectl create -f - <<EOF                                    # Create from inline YAML (heredoc)
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -336,300 +435,308 @@ EOF
 
 ---
 
-## 8. Declarative Management (apply / diff)
+## 9. Declarative Management (apply / diff)
+
+Describe the desired state in files and let Kubernetes reconcile it. This is the recommended approach for real projects.
 
 ```bash
-kubectl apply -f manifest.yaml
-kubectl apply -f ./dir/                          # all files in dir
-kubectl apply -f ./dir/ -R                       # recursive
-kubectl apply -f https://url/manifest.yaml
-kubectl apply -k ./overlay                       # kustomize
-cat x.yaml | kubectl apply -f -
+kubectl apply -f manifest.yaml                   # Create or update from a file
+kubectl apply -f ./dir/                          # Apply every file in a folder
+kubectl apply -f ./dir/ -R                       # Apply folder recursively
+kubectl apply -f https://url/manifest.yaml       # Apply from a URL
+kubectl apply -k ./overlay                       # Apply a kustomization
+cat x.yaml | kubectl apply -f -                  # Apply from stdin
 
-kubectl apply -f x.yaml --dry-run=client         # local validation
-kubectl apply -f x.yaml --dry-run=server         # validated by API server/admission
-kubectl apply -f x.yaml --server-side            # server-side apply (SSA)
-kubectl apply -f x.yaml --server-side --force-conflicts
-kubectl apply -f x.yaml --field-manager=my-tool
-kubectl apply -f ./dir --prune -l app=web        # delete objects no longer in files (use with care)
-kubectl apply -f x.yaml --validate=strict
+kubectl apply -f x.yaml --dry-run=client         # Validate locally, change nothing
+kubectl apply -f x.yaml --dry-run=server         # Validate on the API server, change nothing
+kubectl apply -f x.yaml --server-side            # Server-side apply (field ownership tracking)
+kubectl apply -f x.yaml --server-side --force-conflicts   # Take ownership of conflicting fields
+kubectl apply -f x.yaml --field-manager=my-tool  # Name the field manager
+kubectl apply -f ./dir --prune -l app=web        # Delete objects removed from the files (use with care)
+kubectl apply -f x.yaml --validate=strict        # Fail on unknown or duplicate fields
 
-kubectl diff -f manifest.yaml                    # show what would change
-kubectl diff -k ./overlay
+kubectl diff -f manifest.yaml                    # Preview changes before applying
+kubectl diff -k ./overlay                        # Preview kustomization changes
 
-kubectl replace -f manifest.yaml                 # full replace
-kubectl replace --force -f manifest.yaml         # delete + recreate
+kubectl replace -f manifest.yaml                 # Replace the whole object
+kubectl replace --force -f manifest.yaml         # Delete and recreate the object
 
 # Last-applied configuration
-kubectl apply view-last-applied deploy/<name>
-kubectl apply set-last-applied -f manifest.yaml --create-annotation
-kubectl apply edit-last-applied deploy/<name>
+kubectl apply view-last-applied deploy/<name>    # Show what was last applied
+kubectl apply set-last-applied -f manifest.yaml --create-annotation   # Set the last-applied annotation
+kubectl apply edit-last-applied deploy/<name>    # Edit the last-applied annotation
 ```
 
 ---
 
-## 9. Generating YAML (dry-run)
+## 10. Generating YAML (dry-run)
+
+The fastest way to write manifests: let kubectl generate a template, then edit it.
 
 ```bash
-kubectl run nginx --image=nginx --dry-run=client -o yaml > pod.yaml
-kubectl create deployment web --image=nginx --replicas=3 --dry-run=client -o yaml > deploy.yaml
-kubectl expose deployment web --port=80 --dry-run=client -o yaml > svc.yaml
-kubectl create configmap cfg --from-file=app.conf --dry-run=client -o yaml > cm.yaml
-kubectl create secret generic s --from-literal=k=v --dry-run=client -o yaml > secret.yaml
-kubectl create job j --image=busybox --dry-run=client -o yaml -- echo hi > job.yaml
-kubectl create cronjob cj --image=busybox --schedule="*/5 * * * *" --dry-run=client -o yaml -- date
-kubectl create role r --verb=get,list --resource=pods --dry-run=client -o yaml
-kubectl create ingress ing --rule="a.com/*=svc:80" --dry-run=client -o yaml
+kubectl run nginx --image=nginx --dry-run=client -o yaml > pod.yaml                          # Pod template
+kubectl create deployment web --image=nginx --replicas=3 --dry-run=client -o yaml > deploy.yaml   # Deployment template
+kubectl expose deployment web --port=80 --dry-run=client -o yaml > svc.yaml                  # Service template
+kubectl create configmap cfg --from-file=app.conf --dry-run=client -o yaml > cm.yaml         # ConfigMap template
+kubectl create secret generic s --from-literal=k=v --dry-run=client -o yaml > secret.yaml    # Secret template
+kubectl create job j --image=busybox --dry-run=client -o yaml -- echo hi > job.yaml          # Job template
+kubectl create cronjob cj --image=busybox --schedule="*/5 * * * *" --dry-run=client -o yaml -- date   # CronJob template
+kubectl create role r --verb=get,list --resource=pods --dry-run=client -o yaml               # Role template
+kubectl create ingress ing --rule="a.com/*=svc:80" --dry-run=client -o yaml                  # Ingress template
 
-# Export a live object as clean-ish YAML
-kubectl get deploy web -o yaml --show-managed-fields=false > web.yaml
+kubectl get deploy web -o yaml --show-managed-fields=false > web.yaml   # Export a live object to YAML
 ```
 
 ---
 
-## 10. Updating Resources (edit / patch / set)
+## 11. Updating Resources (edit / patch / set)
+
+Change running resources: open them in an editor, patch specific fields, or use `set` shortcuts.
 
 ```bash
 # Edit in $EDITOR
-kubectl edit deploy/<name>
-KUBE_EDITOR="nano" kubectl edit svc/<name>
-kubectl edit deploy/<name> -o json
+kubectl edit deploy/<name>                       # Open a resource in your editor
+KUBE_EDITOR="nano" kubectl edit svc/<name>       # Use a specific editor
+kubectl edit deploy/<name> -o json               # Edit as JSON instead of YAML
 
 # set — targeted updates
-kubectl set image deploy/web nginx=nginx:1.27            # container=image
-kubectl set image deploy/web *=nginx:1.27                # all containers
-kubectl set env deploy/web KEY=value
-kubectl set env deploy/web KEY-                          # remove var
-kubectl set env deploy/web --from=configmap/app-cfg
-kubectl set env deploy/web --from=secret/db --prefix=DB_
-kubectl set env deploy/web --list
-kubectl set resources deploy/web -c=nginx --limits=cpu=500m,memory=512Mi --requests=cpu=100m,memory=128Mi
-kubectl set serviceaccount deploy/web app-sa
-kubectl set selector svc/web app=web-v2
-kubectl set subject rolebinding/rb --user=alice --serviceaccount=ns:sa
+kubectl set image deploy/web nginx=nginx:1.27            # Change one container's image
+kubectl set image deploy/web *=nginx:1.27                # Change the image of all containers
+kubectl set env deploy/web KEY=value                     # Add or update an env variable
+kubectl set env deploy/web KEY-                          # Remove an env variable
+kubectl set env deploy/web --from=configmap/app-cfg      # Import all keys from a ConfigMap
+kubectl set env deploy/web --from=secret/db --prefix=DB_ # Import Secret keys with a prefix
+kubectl set env deploy/web --list                        # List current env variables
+kubectl set resources deploy/web -c=nginx --limits=cpu=500m,memory=512Mi --requests=cpu=100m,memory=128Mi   # Set requests/limits
+kubectl set serviceaccount deploy/web app-sa             # Change the service account
+kubectl set selector svc/web app=web-v2                  # Change a service's selector
+kubectl set subject rolebinding/rb --user=alice --serviceaccount=ns:sa   # Add subjects to a binding
 
 # patch — strategic merge (default)
-kubectl patch deploy web -p '{"spec":{"replicas":5}}'
-kubectl patch node <node> -p '{"spec":{"unschedulable":true}}'
+kubectl patch deploy web -p '{"spec":{"replicas":5}}'                    # Patch a field
+kubectl patch node <node> -p '{"spec":{"unschedulable":true}}'           # Mark node unschedulable
 # JSON merge patch
-kubectl patch svc web --type=merge -p '{"spec":{"type":"NodePort"}}'
+kubectl patch svc web --type=merge -p '{"spec":{"type":"NodePort"}}'     # Merge-patch a field
 # JSON patch (RFC 6902)
-kubectl patch pod <pod> --type=json -p='[{"op":"replace","path":"/spec/containers/0/image","value":"nginx:1.27"}]'
-kubectl patch deploy web --type=json -p='[{"op":"remove","path":"/spec/template/spec/containers/0/env/0"}]'
+kubectl patch pod <pod> --type=json -p='[{"op":"replace","path":"/spec/containers/0/image","value":"nginx:1.27"}]'   # Replace by path
+kubectl patch deploy web --type=json -p='[{"op":"remove","path":"/spec/template/spec/containers/0/env/0"}]'           # Remove by path
 # Patch from file / subresource
-kubectl patch deploy web --patch-file=patch.yaml
-kubectl patch deploy web --subresource=scale -p '{"spec":{"replicas":2}}'
+kubectl patch deploy web --patch-file=patch.yaml                         # Patch from a file
+kubectl patch deploy web --subresource=scale -p '{"spec":{"replicas":2}}'   # Patch the scale subresource
 # Remove finalizers from a stuck object
-kubectl patch <kind>/<name> -p '{"metadata":{"finalizers":null}}' --type=merge
+kubectl patch <kind>/<name> -p '{"metadata":{"finalizers":null}}' --type=merge   # Unblock stuck deletion
 ```
 
 ---
 
-## 11. Deleting Resources
+## 12. Deleting Resources
+
+Remove resources by name, file, label or field. Force options skip graceful shutdown, so use them carefully.
 
 ```bash
-kubectl delete pod <pod>
-kubectl delete pod <pod1> <pod2>
-kubectl delete -f manifest.yaml
-kubectl delete -k ./overlay
-kubectl delete pods -l app=web
-kubectl delete pods --all -n <ns>
-kubectl delete all --all -n <ns>                         # does not delete cm/secrets/pvc
-kubectl delete ns <ns>                                   # deletes everything inside
-kubectl delete pod <pod> --grace-period=0 --force        # force kill
-kubectl delete pod <pod> --now                           # grace period = 1
-kubectl delete deploy web --cascade=orphan               # keep ReplicaSets/pods
-kubectl delete deploy web --cascade=foreground
-kubectl delete pod <pod> --wait=false
-kubectl delete pods --field-selector=status.phase=Failed -A
-kubectl delete pods --field-selector=status.phase=Succeeded -A
-kubectl delete pod <pod> --dry-run=server
-kubectl delete pods -l app=web -i                         # interactive confirm
+kubectl delete pod <pod>                                 # Delete a pod
+kubectl delete pod <pod1> <pod2>                         # Delete several pods
+kubectl delete -f manifest.yaml                          # Delete resources in a file
+kubectl delete -k ./overlay                              # Delete a kustomization
+kubectl delete pods -l app=web                           # Delete pods by label
+kubectl delete pods --all -n <ns>                        # Delete all pods in a namespace
+kubectl delete all --all -n <ns>                         # Delete common workloads (not cm/secrets/pvc)
+kubectl delete ns <ns>                                   # Delete a namespace and everything in it
+kubectl delete pod <pod> --grace-period=0 --force        # Force kill immediately
+kubectl delete pod <pod> --now                           # Delete with a 1-second grace period
+kubectl delete deploy web --cascade=orphan               # Delete deployment but keep its pods
+kubectl delete deploy web --cascade=foreground           # Delete children first, then owner
+kubectl delete pod <pod> --wait=false                    # Return without waiting
+kubectl delete pods --field-selector=status.phase=Failed -A      # Clean up failed pods
+kubectl delete pods --field-selector=status.phase=Succeeded -A   # Clean up completed pods
+kubectl delete pod <pod> --dry-run=server                # Simulate the deletion
+kubectl delete pods -l app=web -i                        # Ask for confirmation first
 ```
 
 ---
 
-## 12. Pods: Logs, Exec, Copy, Attach
+## 13. Pods: Logs, Exec, Copy, Attach
+
+Interact with running containers: read logs, open a shell, and move files in and out.
 
 ```bash
 # Logs
-kubectl logs <pod>
-kubectl logs <pod> -c <container>                        # specific container
-kubectl logs <pod> --all-containers
-kubectl logs <pod> -f                                    # follow
-kubectl logs <pod> --previous                            # crashed instance (-p)
-kubectl logs <pod> --tail=100
-kubectl logs <pod> --since=1h
-kubectl logs <pod> --since-time=2026-01-01T10:00:00Z
-kubectl logs <pod> --timestamps
-kubectl logs -l app=web --all-containers --prefix --max-log-requests=10
-kubectl logs deploy/web                                  # picks one pod
-kubectl logs job/<job>
-kubectl logs <pod> --limit-bytes=10000
+kubectl logs <pod>                                       # Show pod logs
+kubectl logs <pod> -c <container>                        # Logs from a specific container
+kubectl logs <pod> --all-containers                      # Logs from all containers
+kubectl logs <pod> -f                                    # Stream logs live
+kubectl logs <pod> --previous                            # Logs from the previous (crashed) container
+kubectl logs <pod> --tail=100                            # Last 100 lines
+kubectl logs <pod> --since=1h                            # Logs from the last hour
+kubectl logs <pod> --since-time=2026-01-01T10:00:00Z     # Logs since a timestamp
+kubectl logs <pod> --timestamps                          # Prefix each line with a timestamp
+kubectl logs -l app=web --all-containers --prefix --max-log-requests=10   # Logs from many pods, labelled
+kubectl logs deploy/web                                  # Logs from one pod of a deployment
+kubectl logs job/<job>                                   # Logs from a job's pod
+kubectl logs <pod> --limit-bytes=10000                   # Cap log output size
 
 # Exec
-kubectl exec <pod> -- ls /
-kubectl exec -it <pod> -- sh
-kubectl exec -it <pod> -c <container> -- bash
-kubectl exec deploy/web -- env
-kubectl exec <pod> -- cat /etc/resolv.conf
+kubectl exec <pod> -- ls /                               # Run a command in a pod
+kubectl exec -it <pod> -- sh                             # Open an interactive shell
+kubectl exec -it <pod> -c <container> -- bash            # Shell into a specific container
+kubectl exec deploy/web -- env                           # Run a command in a deployment's pod
+kubectl exec <pod> -- cat /etc/resolv.conf               # Check the pod's DNS config
 
 # Attach
-kubectl attach <pod> -it
-kubectl attach <pod> -c <container>
+kubectl attach <pod> -it                                 # Attach to the main process
+kubectl attach <pod> -c <container>                      # Attach to a specific container
 
 # Copy (requires tar in the container)
-kubectl cp <pod>:/path/file ./file
-kubectl cp ./file <pod>:/path/file
-kubectl cp <ns>/<pod>:/path ./local -c <container>
-kubectl cp ./dir <pod>:/tmp/dir --retries=3
+kubectl cp <pod>:/path/file ./file                       # Copy from pod to local
+kubectl cp ./file <pod>:/path/file                       # Copy from local to pod
+kubectl cp <ns>/<pod>:/path ./local -c <container>       # Copy from a container in another namespace
+kubectl cp ./dir <pod>:/tmp/dir --retries=3              # Copy a folder with retries
 ```
 
 ---
 
-## 13. Deployments & Rollouts
+## 14. Deployments & Rollouts
+
+Manage application updates: watch progress, see history, roll back, and restart.
 
 ```bash
-kubectl rollout status deploy/web
-kubectl rollout status deploy/web --timeout=120s
-kubectl rollout history deploy/web
-kubectl rollout history deploy/web --revision=3
-kubectl rollout undo deploy/web                          # previous revision
-kubectl rollout undo deploy/web --to-revision=2
-kubectl rollout restart deploy/web                       # rolling restart
-kubectl rollout restart deploy -n <ns>                   # all deployments in ns
-kubectl rollout pause deploy/web
-kubectl rollout resume deploy/web
+kubectl rollout status deploy/web                        # Watch a rollout until it finishes
+kubectl rollout status deploy/web --timeout=120s         # Fail if not done in time
+kubectl rollout history deploy/web                       # List previous revisions
+kubectl rollout history deploy/web --revision=3          # Details of a specific revision
+kubectl rollout undo deploy/web                          # Roll back to the previous revision
+kubectl rollout undo deploy/web --to-revision=2          # Roll back to a specific revision
+kubectl rollout restart deploy/web                       # Restart pods without changing the spec
+kubectl rollout restart deploy -n <ns>                   # Restart all deployments in a namespace
+kubectl rollout pause deploy/web                         # Pause to batch several changes
+kubectl rollout resume deploy/web                        # Resume a paused rollout
 
 # Works for daemonsets and statefulsets too
-kubectl rollout restart ds/<ds>
-kubectl rollout status sts/<sts>
+kubectl rollout restart ds/<ds>                          # Restart a DaemonSet
+kubectl rollout status sts/<sts>                         # Watch a StatefulSet rollout
 
-# Record a change cause (shows in history)
-kubectl annotate deploy/web kubernetes.io/change-cause="upgrade to 1.27" --overwrite
+kubectl annotate deploy/web kubernetes.io/change-cause="upgrade to 1.27" --overwrite   # Record why (shows in history)
 
-# Inspect ReplicaSets behind a deployment
-kubectl get rs -l app=web
+kubectl get rs -l app=web                                # ReplicaSets behind a deployment
 ```
 
 ---
 
-## 14. Scaling & Autoscaling
+## 15. Scaling & Autoscaling
+
+Change the number of replicas manually or let the Horizontal Pod Autoscaler do it based on load.
 
 ```bash
-kubectl scale deploy/web --replicas=5
-kubectl scale deploy/web --current-replicas=5 --replicas=3   # conditional
-kubectl scale sts/db --replicas=3
-kubectl scale --replicas=0 deploy --all -n <ns>              # scale everything down
-kubectl scale -f deploy.yaml --replicas=2
+kubectl scale deploy/web --replicas=5                        # Set replica count
+kubectl scale deploy/web --current-replicas=5 --replicas=3   # Scale only if currently at 5
+kubectl scale sts/db --replicas=3                            # Scale a StatefulSet
+kubectl scale --replicas=0 deploy --all -n <ns>              # Scale every deployment to zero
+kubectl scale -f deploy.yaml --replicas=2                    # Scale resources from a file
 
 # HPA (requires metrics-server)
-kubectl autoscale deploy/web --min=2 --max=10 --cpu-percent=70
-kubectl get hpa
-kubectl get hpa -w
-kubectl describe hpa web
-kubectl delete hpa web
+kubectl autoscale deploy/web --min=2 --max=10 --cpu-percent=70   # Autoscale on CPU usage
+kubectl get hpa                                              # List autoscalers
+kubectl get hpa -w                                           # Watch autoscaler decisions
+kubectl describe hpa web                                     # Current metrics and events
+kubectl delete hpa web                                       # Remove the autoscaler
 ```
 
 ---
 
-## 15. Services, Networking & Port Forwarding
+## 16. Services, Networking & Port Forwarding
+
+Inspect how traffic reaches your pods, and reach them from your own machine for testing.
 
 ```bash
-kubectl get svc
-kubectl get svc -o wide
-kubectl get endpoints <svc>
-kubectl get endpointslices -l kubernetes.io/service-name=<svc>
-kubectl get ingress
-kubectl describe ingress <ing>
-kubectl get ingressclass
-kubectl get networkpolicy
-kubectl describe networkpolicy <np>
+kubectl get svc                                          # List services
+kubectl get svc -o wide                                  # Services with selectors
+kubectl get endpoints <svc>                              # Pod IPs behind a service
+kubectl get endpointslices -l kubernetes.io/service-name=<svc>   # EndpointSlices for a service
+kubectl get ingress                                      # List ingresses
+kubectl describe ingress <ing>                           # Ingress rules and backends
+kubectl get ingressclass                                 # Available ingress controllers
+kubectl get networkpolicy                                # List network policies
+kubectl describe networkpolicy <np>                      # Show policy rules
 
 # Port forwarding
-kubectl port-forward pod/<pod> 8080:80
-kubectl port-forward svc/<svc> 8080:80
-kubectl port-forward deploy/<deploy> 8080:80
-kubectl port-forward pod/<pod> 8080:80 9090:9090          # multiple ports
-kubectl port-forward pod/<pod> :80                         # random local port
-kubectl port-forward --address 0.0.0.0 svc/<svc> 8080:80   # listen on all interfaces
+kubectl port-forward pod/<pod> 8080:80                   # localhost:8080 → pod port 80
+kubectl port-forward svc/<svc> 8080:80                   # localhost:8080 → service port 80
+kubectl port-forward deploy/<deploy> 8080:80             # Forward to a deployment's pod
+kubectl port-forward pod/<pod> 8080:80 9090:9090         # Forward several ports
+kubectl port-forward pod/<pod> :80                       # Pick a random local port
+kubectl port-forward --address 0.0.0.0 svc/<svc> 8080:80 # Listen on all interfaces
 
 # API proxy
-kubectl proxy                                              # http://127.0.0.1:8001
-kubectl proxy --port=8080
-curl http://127.0.0.1:8001/api/v1/namespaces/default/pods
-curl http://127.0.0.1:8001/api/v1/namespaces/<ns>/services/<svc>:<port>/proxy/
+kubectl proxy                                            # Proxy the API to http://127.0.0.1:8001
+kubectl proxy --port=8080                                # Proxy on a different port
+curl http://127.0.0.1:8001/api/v1/namespaces/default/pods                       # Call the API through the proxy
+curl http://127.0.0.1:8001/api/v1/namespaces/<ns>/services/<svc>:<port>/proxy/  # Reach a service through the proxy
 
 # DNS & connectivity tests
-kubectl run dns-test --image=busybox:1.36 --rm -it --restart=Never -- nslookup <svc>.<ns>.svc.cluster.local
-kubectl run curl --image=curlimages/curl --rm -it --restart=Never -- curl -sv http://<svc>.<ns>:80
-kubectl run netshoot --image=nicolaka/netshoot --rm -it --restart=Never -- bash
+kubectl run dns-test --image=busybox:1.36 --rm -it --restart=Never -- nslookup <svc>.<ns>.svc.cluster.local   # Test DNS
+kubectl run curl --image=curlimages/curl --rm -it --restart=Never -- curl -sv http://<svc>.<ns>:80           # Test HTTP
+kubectl run netshoot --image=nicolaka/netshoot --rm -it --restart=Never -- bash                              # Full network toolbox
 ```
 
 **DNS format:** `<service>.<namespace>.svc.cluster.local` · Pod: `<pod-ip-dashed>.<namespace>.pod.cluster.local`
 
 ---
 
-## 16. ConfigMaps & Secrets
+## 17. ConfigMaps & Secrets
+
+Keep configuration and credentials out of your images and inject them into pods.
 
 ```bash
 # ConfigMaps
-kubectl create configmap cfg --from-literal=A=1 --from-literal=B=2
-kubectl create configmap cfg --from-file=app.properties
-kubectl create configmap cfg --from-file=custom-key=app.properties
-kubectl create configmap cfg --from-file=./config-dir/
-kubectl create configmap cfg --from-env-file=.env
-kubectl get cm cfg -o yaml
-kubectl describe cm cfg
+kubectl create configmap cfg --from-literal=A=1 --from-literal=B=2   # From key/value pairs
+kubectl create configmap cfg --from-file=app.properties              # From a file (key = file name)
+kubectl create configmap cfg --from-file=custom-key=app.properties   # From a file with a custom key
+kubectl create configmap cfg --from-file=./config-dir/               # From every file in a folder
+kubectl create configmap cfg --from-env-file=.env                    # From a .env file
+kubectl get cm cfg -o yaml                                           # Show ConfigMap contents
+kubectl describe cm cfg                                              # Describe a ConfigMap
 
 # Secrets
-kubectl create secret generic db --from-literal=user=admin --from-literal=pass='p@ss'
-kubectl create secret generic db --from-file=./username.txt --from-file=./password.txt
-kubectl create secret generic db --from-env-file=.env
-kubectl create secret tls web-tls --cert=tls.crt --key=tls.key
+kubectl create secret generic db --from-literal=user=admin --from-literal=pass='p@ss'   # From literals
+kubectl create secret generic db --from-file=./username.txt --from-file=./password.txt # From files
+kubectl create secret generic db --from-env-file=.env                                  # From a .env file
+kubectl create secret tls web-tls --cert=tls.crt --key=tls.key                         # TLS certificate secret
 kubectl create secret docker-registry regcred \
-  --docker-server=<registry> --docker-username=<u> --docker-password=<p> --docker-email=<e>
+  --docker-server=<registry> --docker-username=<u> --docker-password=<p> --docker-email=<e>   # Private registry login
 kubectl create secret generic regcred --from-file=.dockerconfigjson=$HOME/.docker/config.json \
-  --type=kubernetes.io/dockerconfigjson
+  --type=kubernetes.io/dockerconfigjson                                                # Registry secret from Docker config
 
 # Read / decode
-kubectl get secret db -o jsonpath='{.data.pass}' | base64 -d
-kubectl get secret db -o go-template='{{range $k,$v := .data}}{{$k}}={{$v|base64decode}}{{"\n"}}{{end}}'
+kubectl get secret db -o jsonpath='{.data.pass}' | base64 -d                           # Decode one key
+kubectl get secret db -o go-template='{{range $k,$v := .data}}{{$k}}={{$v|base64decode}}{{"\n"}}{{end}}'   # Decode all keys
 
-# Update a ConfigMap/Secret in place from files
-kubectl create configmap cfg --from-file=app.conf --dry-run=client -o yaml | kubectl apply -f -
+kubectl create configmap cfg --from-file=app.conf --dry-run=client -o yaml | kubectl apply -f -   # Update a ConfigMap in place
 
-# Encode / decode helpers
-echo -n 'value' | base64
-echo 'dmFsdWU=' | base64 -d
+echo -n 'value' | base64                                 # Encode a value
+echo 'dmFsdWU=' | base64 -d                              # Decode a value
 ```
 
 > ⚠️ Secrets are only **base64-encoded**, not encrypted. Enable encryption at rest and use RBAC / an external secret store.
 
 ---
 
-## 17. Storage (PV / PVC / StorageClass)
+## 18. Storage (PV / PVC / StorageClass)
+
+PersistentVolumes provide storage, PersistentVolumeClaims request it, and StorageClasses provision it dynamically.
 
 ```bash
-kubectl get pv
-kubectl get pvc -A
-kubectl get sc
-kubectl get volumeattachments
-kubectl get csidrivers
-kubectl describe pvc <pvc>
-kubectl describe pv <pv>
+kubectl get pv                                       # List persistent volumes
+kubectl get pvc -A                                   # List claims in all namespaces
+kubectl get sc                                       # List storage classes
+kubectl get volumeattachments                        # Volumes attached to nodes
+kubectl get csidrivers                               # Installed CSI storage drivers
+kubectl describe pvc <pvc>                           # Claim status and binding events
+kubectl describe pv <pv>                             # Volume details and source
 
-# Set default StorageClass
-kubectl patch sc <sc> -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
-
-# Expand a PVC (if allowVolumeExpansion: true)
-kubectl patch pvc <pvc> -p '{"spec":{"resources":{"requests":{"storage":"20Gi"}}}}'
-
-# Change reclaim policy
-kubectl patch pv <pv> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
-
-# Release a "Released" PV so it can be re-bound
-kubectl patch pv <pv> --type=json -p='[{"op":"remove","path":"/spec/claimRef"}]'
+kubectl patch sc <sc> -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'   # Set default StorageClass
+kubectl patch pvc <pvc> -p '{"spec":{"resources":{"requests":{"storage":"20Gi"}}}}'   # Expand a PVC (if allowed)
+kubectl patch pv <pv> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'       # Keep data after PVC deletion
+kubectl patch pv <pv> --type=json -p='[{"op":"remove","path":"/spec/claimRef"}]'     # Make a Released PV bindable again
 ```
 
 **Access modes:** `RWO` ReadWriteOnce · `ROX` ReadOnlyMany · `RWX` ReadWriteMany · `RWOP` ReadWriteOncePod
@@ -637,362 +744,375 @@ kubectl patch pv <pv> --type=json -p='[{"op":"remove","path":"/spec/claimRef"}]'
 
 ---
 
-## 18. Jobs & CronJobs
+## 19. Jobs & CronJobs
+
+Jobs run a task to completion; CronJobs run Jobs on a schedule.
 
 ```bash
-kubectl create job hello --image=busybox -- echo "hello"
-kubectl get jobs
-kubectl describe job hello
-kubectl logs job/hello
-kubectl wait --for=condition=complete job/hello --timeout=60s
-kubectl delete job hello
+kubectl create job hello --image=busybox -- echo "hello"     # Run a one-off job
+kubectl get jobs                                             # List jobs
+kubectl describe job hello                                   # Job status and events
+kubectl logs job/hello                                       # Job output
+kubectl wait --for=condition=complete job/hello --timeout=60s   # Wait until the job finishes
+kubectl delete job hello                                     # Delete a job and its pods
 
-kubectl create cronjob nightly --image=busybox --schedule="0 0 * * *" -- echo run
-kubectl get cronjobs
-kubectl create job nightly-manual --from=cronjob/nightly      # trigger now
-kubectl patch cronjob nightly -p '{"spec":{"suspend":true}}'   # pause
-kubectl patch cronjob nightly -p '{"spec":{"suspend":false}}'  # resume
-kubectl get jobs --selector=batch.kubernetes.io/job-name=hello # (label varies by version)
+kubectl create cronjob nightly --image=busybox --schedule="0 0 * * *" -- echo run   # Create a CronJob
+kubectl get cronjobs                                         # List CronJobs and last run time
+kubectl create job nightly-manual --from=cronjob/nightly     # Trigger a CronJob now
+kubectl patch cronjob nightly -p '{"spec":{"suspend":true}}'    # Pause a CronJob
+kubectl patch cronjob nightly -p '{"spec":{"suspend":false}}'   # Resume a CronJob
+kubectl get pods -l job-name=hello                           # Pods created by a job
 ```
 
 **Cron format:** `minute hour day-of-month month day-of-week` → `*/15 * * * *` every 15 min
 
 ---
 
-## 19. Labels, Annotations & Selectors
+## 20. Labels, Annotations & Selectors
+
+Labels group and select resources; annotations store extra metadata that is not used for selection.
 
 ```bash
-kubectl label pod <pod> env=prod
-kubectl label pod <pod> env=staging --overwrite
-kubectl label pod <pod> env-                             # remove label
-kubectl label pods --all team=platform
-kubectl label pods -l app=web tier=frontend
-kubectl label node <node> disktype=ssd
+kubectl label pod <pod> env=prod                         # Add a label
+kubectl label pod <pod> env=staging --overwrite          # Change an existing label
+kubectl label pod <pod> env-                             # Remove a label
+kubectl label pods --all team=platform                   # Label every pod
+kubectl label pods -l app=web tier=frontend              # Label pods matching a selector
+kubectl label node <node> disktype=ssd                   # Label a node (for scheduling)
 
-kubectl annotate pod <pod> owner="omar"
-kubectl annotate pod <pod> owner-                        # remove
-kubectl annotate deploy web description="frontend" --overwrite
+kubectl annotate pod <pod> owner="omar"                  # Add an annotation
+kubectl annotate pod <pod> owner-                        # Remove an annotation
+kubectl annotate deploy web description="frontend" --overwrite   # Change an annotation
 
 # Selectors
-kubectl get pods -l env=prod                             # equality
-kubectl get pods -l env!=prod
-kubectl get pods -l 'env in (prod,qa)'                   # set-based
-kubectl get pods -l 'env notin (dev)'
-kubectl get pods -l 'app'                                # label exists
-kubectl get pods -l '!app'                               # label absent
-kubectl get pods -l app=web,tier=frontend                # AND
+kubectl get pods -l env=prod                             # Label equals value
+kubectl get pods -l env!=prod                            # Label not equal to value
+kubectl get pods -l 'env in (prod,qa)'                   # Label in a set
+kubectl get pods -l 'env notin (dev)'                    # Label not in a set
+kubectl get pods -l 'app'                                # Label exists
+kubectl get pods -l '!app'                               # Label does not exist
+kubectl get pods -l app=web,tier=frontend                # Both conditions (AND)
 ```
 
 ---
 
-## 20. Namespaces
+## 21. Namespaces
+
+Namespaces split one cluster into isolated virtual clusters for teams or environments.
 
 ```bash
-kubectl get ns
-kubectl create ns dev
-kubectl delete ns dev
-kubectl config set-context --current --namespace=dev
-kubectl config view --minify -o jsonpath='{..namespace}'   # current ns
-kubectl get all -n dev
-kubectl get resourcequota -n dev
-kubectl get limitrange -n dev
-kubectl describe quota -n dev
+kubectl get ns                                           # List namespaces
+kubectl create ns dev                                    # Create a namespace
+kubectl delete ns dev                                    # Delete a namespace and its contents
+kubectl config set-context --current --namespace=dev     # Make "dev" the default namespace
+kubectl config view --minify -o jsonpath='{..namespace}' # Show the current default namespace
+kubectl get all -n dev                                   # Workloads in a namespace
+kubectl get resourcequota -n dev                         # Quotas in a namespace
+kubectl get limitrange -n dev                            # Default limits in a namespace
+kubectl describe quota -n dev                            # Quota usage vs. limits
 
-# Find what's blocking a namespace stuck in "Terminating"
+# Namespace stuck in "Terminating"
 kubectl api-resources --verbs=list --namespaced -o name \
-  | xargs -n 1 kubectl get --show-kind --ignore-not-found -n <ns>
-kubectl get ns <ns> -o json | jq '.spec.finalizers'
+  | xargs -n 1 kubectl get --show-kind --ignore-not-found -n <ns>   # Find leftover resources
+kubectl get ns <ns> -o json | jq '.spec.finalizers'                 # Show finalizers blocking deletion
 ```
 
 ---
 
-## 21. Nodes: Cordon, Drain, Taints
+## 22. Nodes: Cordon, Drain, Taints
+
+Prepare nodes for maintenance and control which pods can be scheduled on them.
 
 ```bash
-kubectl get nodes -o wide
-kubectl describe node <node>
-kubectl get node <node> -o jsonpath='{.status.allocatable}'
-kubectl get nodes --show-labels
-kubectl get nodes -l node-role.kubernetes.io/control-plane
+kubectl get nodes -o wide                                # Nodes with IPs and versions
+kubectl describe node <node>                             # Conditions, capacity, running pods
+kubectl get node <node> -o jsonpath='{.status.allocatable}'   # Resources available to pods
+kubectl get nodes --show-labels                          # Node labels
+kubectl get nodes -l node-role.kubernetes.io/control-plane    # Control-plane nodes only
 
-kubectl cordon <node>                                     # mark unschedulable
-kubectl uncordon <node>
-kubectl drain <node>                                      # evict pods
-kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
-kubectl drain <node> --ignore-daemonsets --force --grace-period=30
-kubectl drain <node> --pod-selector='app!=critical'
-kubectl drain <node> --timeout=5m --disable-eviction       # bypass PDBs (careful)
+kubectl cordon <node>                                     # Stop new pods from scheduling here
+kubectl uncordon <node>                                   # Allow scheduling again
+kubectl drain <node>                                      # Evict pods for maintenance
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data   # Typical drain command
+kubectl drain <node> --ignore-daemonsets --force --grace-period=30   # Also evict unmanaged pods
+kubectl drain <node> --pod-selector='app!=critical'       # Drain only matching pods
+kubectl drain <node> --timeout=5m --disable-eviction      # Delete pods, bypassing PDBs (careful)
 
 # Taints
-kubectl taint nodes <node> key=value:NoSchedule
-kubectl taint nodes <node> key=value:PreferNoSchedule
-kubectl taint nodes <node> key=value:NoExecute
-kubectl taint nodes <node> key=value:NoSchedule-          # remove
-kubectl taint nodes <node> key-                           # remove all effects for key
-kubectl taint nodes <node> node-role.kubernetes.io/control-plane:NoSchedule-
-kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints
+kubectl taint nodes <node> key=value:NoSchedule           # Block new pods without a toleration
+kubectl taint nodes <node> key=value:PreferNoSchedule     # Avoid scheduling if possible
+kubectl taint nodes <node> key=value:NoExecute            # Evict pods without a toleration
+kubectl taint nodes <node> key=value:NoSchedule-          # Remove a specific taint
+kubectl taint nodes <node> key-                           # Remove all taints with this key
+kubectl taint nodes <node> node-role.kubernetes.io/control-plane:NoSchedule-   # Allow pods on control plane
+kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints    # Show taints per node
 
-kubectl delete node <node>
+kubectl delete node <node>                                # Remove a node from the cluster
 ```
 
 ---
 
-## 22. RBAC, ServiceAccounts & Auth
+## 23. RBAC, ServiceAccounts & Auth
+
+Control who can do what. Roles define permissions; bindings grant them to users, groups or service accounts.
 
 ```bash
 # Roles (namespaced)
-kubectl create role pod-reader --verb=get,list,watch --resource=pods -n dev
-kubectl create role cm-editor --verb=* --resource=configmaps --resource-name=app-cfg
-kubectl create rolebinding read-pods --role=pod-reader --user=alice -n dev
-kubectl create rolebinding sa-read --role=pod-reader --serviceaccount=dev:app-sa -n dev
-kubectl create rolebinding grp-read --role=pod-reader --group=devs -n dev
+kubectl create role pod-reader --verb=get,list,watch --resource=pods -n dev     # Read-only pods role
+kubectl create role cm-editor --verb=* --resource=configmaps --resource-name=app-cfg   # Role for one named object
+kubectl create rolebinding read-pods --role=pod-reader --user=alice -n dev      # Grant role to a user
+kubectl create rolebinding sa-read --role=pod-reader --serviceaccount=dev:app-sa -n dev   # Grant to a service account
+kubectl create rolebinding grp-read --role=pod-reader --group=devs -n dev       # Grant to a group
 
 # ClusterRoles (cluster-wide)
-kubectl create clusterrole node-reader --verb=get,list,watch --resource=nodes
-kubectl create clusterrole aggregated --aggregation-rule="rbac.example.com/aggregate=true"
-kubectl create clusterrolebinding node-read --clusterrole=node-reader --user=alice
-kubectl create rolebinding view-dev --clusterrole=view --user=bob -n dev   # reuse built-in
+kubectl create clusterrole node-reader --verb=get,list,watch --resource=nodes   # Cluster-wide read on nodes
+kubectl create clusterrole aggregated --aggregation-rule="rbac.example.com/aggregate=true"   # Aggregate other roles
+kubectl create clusterrolebinding node-read --clusterrole=node-reader --user=alice   # Grant cluster-wide
+kubectl create rolebinding view-dev --clusterrole=view --user=bob -n dev        # Reuse a ClusterRole in one namespace
 
-kubectl get roles,rolebindings -n dev
-kubectl get clusterroles,clusterrolebindings
-kubectl describe clusterrole admin
+kubectl get roles,rolebindings -n dev                    # List namespaced RBAC
+kubectl get clusterroles,clusterrolebindings             # List cluster RBAC
+kubectl describe clusterrole admin                       # Show a role's rules
 
 # Permission checks
-kubectl auth can-i create deployments
-kubectl auth can-i delete pods -n prod
-kubectl auth can-i '*' '*'                                # am I cluster-admin?
-kubectl auth can-i --list -n dev
-kubectl auth can-i get pods --as=alice
-kubectl auth can-i get pods --as=system:serviceaccount:dev:app-sa
-kubectl auth can-i get pods --as=bob --as-group=devs
-kubectl auth whoami                                        # who am I authenticated as
-kubectl auth reconcile -f rbac.yaml
+kubectl auth can-i create deployments                    # Can I create deployments?
+kubectl auth can-i delete pods -n prod                   # Can I delete pods in prod?
+kubectl auth can-i '*' '*'                               # Am I cluster-admin?
+kubectl auth can-i --list -n dev                         # Everything I can do in a namespace
+kubectl auth can-i get pods --as=alice                   # Check another user's permissions
+kubectl auth can-i get pods --as=system:serviceaccount:dev:app-sa   # Check a service account
+kubectl auth can-i get pods --as=bob --as-group=devs     # Check a user as a group member
+kubectl auth whoami                                      # Show my authenticated identity
+kubectl auth reconcile -f rbac.yaml                      # Safely create/update RBAC objects
 
-# Impersonation on any command
-kubectl get pods --as=alice -n dev
+kubectl get pods --as=alice -n dev                       # Run any command as another user
 
 # ServiceAccounts
-kubectl create sa app-sa
-kubectl get sa
-kubectl create token app-sa
-kubectl create token app-sa --duration=24h --audience=api
+kubectl create sa app-sa                                 # Create a service account
+kubectl get sa                                           # List service accounts
+kubectl create token app-sa                              # Issue a short-lived token
+kubectl create token app-sa --duration=24h --audience=api   # Token with custom lifetime and audience
 
 # Certificate signing requests (user certs)
-kubectl get csr
-kubectl certificate approve <csr>
-kubectl certificate deny <csr>
-kubectl get csr <csr> -o jsonpath='{.status.certificate}' | base64 -d > user.crt
+kubectl get csr                                          # List certificate requests
+kubectl certificate approve <csr>                        # Approve a request
+kubectl certificate deny <csr>                           # Deny a request
+kubectl get csr <csr> -o jsonpath='{.status.certificate}' | base64 -d > user.crt   # Save the signed cert
 ```
 
 **Built-in ClusterRoles:** `cluster-admin` · `admin` · `edit` · `view`
 
 ---
 
-## 23. Resource Usage & Events
+## 24. Resource Usage & Events
+
+See CPU and memory usage (needs metrics-server) and the event stream that explains what the cluster is doing.
 
 ```bash
-# Requires metrics-server
-kubectl top nodes
-kubectl top nodes --sort-by=cpu
-kubectl top pods
-kubectl top pods -A --sort-by=memory
-kubectl top pod <pod> --containers
-kubectl top pods -l app=web
+kubectl top nodes                                        # CPU/memory per node
+kubectl top nodes --sort-by=cpu                          # Nodes sorted by CPU
+kubectl top pods                                         # CPU/memory per pod
+kubectl top pods -A --sort-by=memory                     # Heaviest pods cluster-wide
+kubectl top pod <pod> --containers                       # Usage per container
+kubectl top pods -l app=web                              # Usage for matching pods
 
 # Events
-kubectl get events
-kubectl get events -A --sort-by=.lastTimestamp
-kubectl get events -n <ns> --sort-by=.metadata.creationTimestamp
-kubectl get events --field-selector type=Warning
-kubectl get events --field-selector involvedObject.name=<pod>
-kubectl get events -w
-kubectl events                                             # newer command
-kubectl events --for pod/<pod>
-kubectl events --types=Warning -A
-kubectl events --watch
+kubectl get events                                       # Events in the current namespace
+kubectl get events -A --sort-by=.lastTimestamp           # All events, newest last
+kubectl get events -n <ns> --sort-by=.metadata.creationTimestamp   # Events in order of creation
+kubectl get events --field-selector type=Warning         # Only warnings
+kubectl get events --field-selector involvedObject.name=<pod>      # Events for one object
+kubectl get events -w                                    # Watch events live
+kubectl events                                           # Newer, friendlier events command
+kubectl events --for pod/<pod>                           # Events for one object
+kubectl events --types=Warning -A                        # Warnings across the cluster
+kubectl events --watch                                   # Stream new events
 ```
 
 ---
 
-## 24. Debugging & Troubleshooting
+## 25. Debugging & Troubleshooting
+
+Tools for finding out why something is broken: debug containers, node shells, verbose API output.
 
 ```bash
 # Ephemeral debug container in a running pod
-kubectl debug -it <pod> --image=busybox --target=<container>
-kubectl debug -it <pod> --image=nicolaka/netshoot --profile=netadmin
+kubectl debug -it <pod> --image=busybox --target=<container>         # Attach a debug container sharing the process namespace
+kubectl debug -it <pod> --image=nicolaka/netshoot --profile=netadmin # Debug container with network tools and capabilities
 
 # Copy a pod and debug the copy
-kubectl debug <pod> -it --copy-to=<pod>-dbg --container=<container> -- sh
-kubectl debug <pod> --copy-to=<pod>-dbg --set-image=*=busybox
-kubectl debug <pod> -it --copy-to=<pod>-dbg --share-processes --image=busybox
+kubectl debug <pod> -it --copy-to=<pod>-dbg --container=<container> -- sh   # Copy the pod and open a shell
+kubectl debug <pod> --copy-to=<pod>-dbg --set-image=*=busybox               # Copy with a different image
+kubectl debug <pod> -it --copy-to=<pod>-dbg --share-processes --image=busybox   # Copy with shared processes
 
-# Debug a node (pod with host namespaces, host fs at /host)
-kubectl debug node/<node> -it --image=ubuntu
-#   then: chroot /host
+# Debug a node
+kubectl debug node/<node> -it --image=ubuntu             # Shell on a node; host filesystem at /host
+#   then: chroot /host                                   # Act as if logged into the node
 
 # Quick health triage
-kubectl get pods -A | grep -vE 'Running|Completed'
-kubectl get pods -A --field-selector=status.phase!=Running
-kubectl describe pod <pod> | sed -n '/Events/,$p'
-kubectl logs <pod> --previous
-kubectl get pod <pod> -o jsonpath='{.status.containerStatuses[*].state}'
-kubectl get pod <pod> -o jsonpath='{.status.containerStatuses[*].lastState.terminated.reason}'
+kubectl get pods -A | grep -vE 'Running|Completed'       # Find unhealthy pods
+kubectl get pods -A --field-selector=status.phase!=Running   # Pods not in Running phase
+kubectl describe pod <pod> | sed -n '/Events/,$p'        # Show only the events section
+kubectl logs <pod> --previous                            # Why did the last container crash?
+kubectl get pod <pod> -o jsonpath='{.status.containerStatuses[*].state}'                       # Current container state
+kubectl get pod <pod> -o jsonpath='{.status.containerStatuses[*].lastState.terminated.reason}'  # Last termination reason
 
-# Verbose API calls (great for learning / debugging)
-kubectl get pods -v=6          # show HTTP requests
-kubectl get pods -v=8          # include request/response bodies
-kubectl get pods -v=9          # maximum verbosity, curl equivalents
+# Verbose API calls
+kubectl get pods -v=6          # Show HTTP requests made
+kubectl get pods -v=8          # Include request/response bodies
+kubectl get pods -v=9          # Maximum verbosity, with curl equivalents
 
 # Raw API access
-kubectl get --raw /api/v1/namespaces/default/pods
-kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes
-kubectl create --raw /api/v1/namespaces -f ns.json
-kubectl delete --raw /api/v1/namespaces/<ns>/pods/<pod>
+kubectl get --raw /api/v1/namespaces/default/pods        # Raw GET on an API path
+kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes     # Raw node metrics
+kubectl create --raw /api/v1/namespaces -f ns.json       # Raw POST
+kubectl delete --raw /api/v1/namespaces/<ns>/pods/<pod>  # Raw DELETE
 
 # Control-plane pods (kubeadm clusters)
-kubectl get pods -n kube-system
-kubectl logs -n kube-system kube-apiserver-<node>
-kubectl logs -n kube-system -l k8s-app=kube-dns
+kubectl get pods -n kube-system                          # System components
+kubectl logs -n kube-system kube-apiserver-<node>        # API server logs
+kubectl logs -n kube-system -l k8s-app=kube-dns          # CoreDNS logs
 ```
 
 ---
 
-## 25. Waiting & Scripting
+## 26. Waiting & Scripting
+
+Wait for conditions in CI/CD pipelines and combine kubectl with shell tools for bulk operations.
 
 ```bash
-kubectl wait --for=condition=Ready pod/<pod> --timeout=60s
-kubectl wait --for=condition=Ready pods -l app=web --timeout=120s
-kubectl wait --for=condition=Available deploy/web
-kubectl wait --for=condition=complete job/<job> --timeout=300s
-kubectl wait --for=delete pod/<pod> --timeout=60s
-kubectl wait --for=jsonpath='{.status.phase}'=Running pod/<pod>
-kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' svc/<svc>   # create-time checks
+kubectl wait --for=condition=Ready pod/<pod> --timeout=60s           # Wait until a pod is ready
+kubectl wait --for=condition=Ready pods -l app=web --timeout=120s    # Wait for all matching pods
+kubectl wait --for=condition=Available deploy/web                    # Wait for a deployment
+kubectl wait --for=condition=complete job/<job> --timeout=300s       # Wait for a job to finish
+kubectl wait --for=delete pod/<pod> --timeout=60s                    # Wait until deleted
+kubectl wait --for=jsonpath='{.status.phase}'=Running pod/<pod>      # Wait for a field value
+kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' svc/<svc>   # Wait for a LoadBalancer IP
 
-# Loop over resources
-for p in $(kubectl get pods -l app=web -o name); do kubectl logs "$p" --tail=5; done
-kubectl get pods -o name | xargs -I{} kubectl describe {}
+for p in $(kubectl get pods -l app=web -o name); do kubectl logs "$p" --tail=5; done   # Loop over pods
+kubectl get pods -o name | xargs -I{} kubectl describe {}                              # Describe every pod
+kubectl get deploy -n <ns> -o name | xargs -n1 kubectl rollout restart -n <ns>         # Restart every deployment
 
-# Restart every deployment in a namespace
-kubectl get deploy -n <ns> -o name | xargs -n1 kubectl rollout restart -n <ns>
-
-# List all images running in the cluster
-kubectl get pods -A -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.image}{"\n"}{end}{end}' | sort -u
-
-# Pods per node
-kubectl get pods -A -o wide --field-selector spec.nodeName=<node>
+kubectl get pods -A -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.image}{"\n"}{end}{end}' | sort -u   # All images in the cluster
+kubectl get pods -A -o wide --field-selector spec.nodeName=<node>                      # All pods on one node
 ```
 
 ---
 
-## 26. Kustomize
+## 27. Kustomize
+
+Customize plain YAML for different environments (dev, staging, prod) without templates. Built into kubectl.
 
 ```bash
-kubectl kustomize ./overlay                    # render
-kubectl apply -k ./overlay
-kubectl diff -k ./overlay
-kubectl delete -k ./overlay
+kubectl kustomize ./overlay                    # Render the final YAML
+kubectl apply -k ./overlay                     # Apply a kustomization
+kubectl diff -k ./overlay                      # Preview changes
+kubectl delete -k ./overlay                    # Delete everything it defines
 
 # Standalone kustomize CLI
-kustomize build ./overlay
-kustomize create --autodetect
-kustomize edit set image nginx=nginx:1.27
-kustomize edit add resource deploy.yaml
-kustomize edit set namespace dev
+kustomize build ./overlay                      # Render the final YAML
+kustomize create --autodetect                  # Create kustomization.yaml from files in the folder
+kustomize edit set image nginx=nginx:1.27      # Change an image tag
+kustomize edit add resource deploy.yaml        # Add a resource file
+kustomize edit set namespace dev               # Set the namespace for all resources
 ```
 
 ```yaml
 # kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: dev
+namespace: dev                 # Namespace applied to everything
 resources:
-  - ../../base
+  - ../../base                 # Base manifests to start from
 images:
   - name: nginx
-    newTag: "1.27"
+    newTag: "1.27"             # Override the image tag
 patches:
-  - path: replica-patch.yaml
+  - path: replica-patch.yaml   # Environment-specific patch
 configMapGenerator:
   - name: app-cfg
-    literals: [ENV=dev]
+    literals: [ENV=dev]        # Generate a ConfigMap
 ```
 
 ---
 
-## 27. Plugins & Krew
+## 28. Plugins & Krew
+
+Extend kubectl with plugins. Krew is the plugin manager.
 
 ```bash
-kubectl plugin list
+kubectl plugin list                    # List installed plugins
 # Any executable named kubectl-<name> on $PATH becomes `kubectl <name>`
 
 # Krew (plugin manager)
-kubectl krew update
-kubectl krew search
-kubectl krew install ctx ns neat tree stern view-secret
-kubectl krew list
-kubectl krew upgrade
-kubectl krew uninstall <plugin>
+kubectl krew update                    # Refresh the plugin index
+kubectl krew search                    # List available plugins
+kubectl krew install ctx ns neat tree stern view-secret   # Install useful plugins
+kubectl krew list                      # List installed plugins
+kubectl krew upgrade                   # Upgrade all plugins
+kubectl krew uninstall <plugin>        # Remove a plugin
 
 # Popular plugins
-kubectl ctx <context>          # switch context
-kubectl ns <namespace>         # switch namespace
-kubectl neat get pod <pod> -o yaml   # strip clutter from YAML
-kubectl tree deploy <name>     # ownership tree
-kubectl stern <pattern>        # multi-pod log tail
-kubectl view-secret <secret>   # decode secrets
+kubectl ctx <context>                  # Switch context quickly
+kubectl ns <namespace>                 # Switch namespace quickly
+kubectl neat get pod <pod> -o yaml     # Clean YAML without status and managed fields
+kubectl tree deploy <name>             # Show owner → child resource tree
+kubectl stern <pattern>                # Tail logs from many pods with colours
+kubectl view-secret <secret>           # Show decoded secret values
 ```
 
-**Related tools:** `k9s` (TUI) · `kubectx`/`kubens` · `stern` · `kubeconform` (manifest validation) · `kube-linter`
+**Related tools:** `k9s` (terminal UI) · `kubectx`/`kubens` · `stern` · `kubeconform` (manifest validation) · `kube-linter`
 
 ---
 
-## 28. kubeadm (Cluster Lifecycle)
+## 29. kubeadm (Cluster Lifecycle)
+
+kubeadm bootstraps, joins, upgrades and resets self-managed clusters.
 
 ```bash
 # Initialize control plane
-sudo kubeadm init --pod-network-cidr=10.244.0.0/16
-sudo kubeadm init --control-plane-endpoint=<lb>:6443 --upload-certs
-sudo kubeadm init --config=kubeadm-config.yaml
-sudo kubeadm config print init-defaults > kubeadm-config.yaml
-sudo kubeadm config images list
-sudo kubeadm config images pull
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16                   # Create a cluster
+sudo kubeadm init --control-plane-endpoint=<lb>:6443 --upload-certs  # HA-ready control plane
+sudo kubeadm init --config=kubeadm-config.yaml                       # Init from a config file
+sudo kubeadm config print init-defaults > kubeadm-config.yaml        # Generate a default config
+sudo kubeadm config images list                                      # Images the cluster needs
+sudo kubeadm config images pull                                      # Pre-pull those images
 
 # Configure kubectl after init
-mkdir -p $HOME/.kube
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
+mkdir -p $HOME/.kube                                       # Create the kubeconfig folder
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config   # Copy the admin kubeconfig
+sudo chown $(id -u):$(id -g) $HOME/.kube/config            # Make it owned by your user
 
 # Join nodes
-kubeadm token create --print-join-command
-kubeadm token list
-kubeadm token delete <token>
-sudo kubeadm join <ip>:6443 --token <t> --discovery-token-ca-cert-hash sha256:<hash>
+kubeadm token create --print-join-command                  # Print a ready-to-use join command
+kubeadm token list                                         # List bootstrap tokens
+kubeadm token delete <token>                               # Revoke a token
+sudo kubeadm join <ip>:6443 --token <t> --discovery-token-ca-cert-hash sha256:<hash>   # Join a worker
 sudo kubeadm join <ip>:6443 --token <t> --discovery-token-ca-cert-hash sha256:<hash> \
-  --control-plane --certificate-key <key>
-sudo kubeadm init phase upload-certs --upload-certs        # new certificate key
+  --control-plane --certificate-key <key>                  # Join an extra control-plane node
+sudo kubeadm init phase upload-certs --upload-certs        # Generate a new certificate key
 
-# Upgrades (control plane)
-sudo kubeadm upgrade plan
-sudo kubeadm upgrade apply v1.X.Y
-# Upgrades (other nodes)
-sudo kubeadm upgrade node
+# Upgrades
+sudo kubeadm upgrade plan                                  # Show available upgrade versions
+sudo kubeadm upgrade apply v1.X.Y                          # Upgrade the first control-plane node
+sudo kubeadm upgrade node                                  # Upgrade other nodes
 
 # Certificates
-sudo kubeadm certs check-expiration
-sudo kubeadm certs renew all
-sudo kubeadm certs renew apiserver
+sudo kubeadm certs check-expiration                        # Show certificate expiry dates
+sudo kubeadm certs renew all                               # Renew all certificates
+sudo kubeadm certs renew apiserver                         # Renew one certificate
 
 # Tear down
-sudo kubeadm reset
-sudo kubeadm reset --force
+sudo kubeadm reset                                         # Undo kubeadm init/join on this node
+sudo kubeadm reset --force                                 # Reset without confirmation
 ```
 
 **Typical node upgrade flow:**
 ```bash
-kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
-# upgrade kubeadm package → kubeadm upgrade (apply|node) → upgrade kubelet & kubectl packages
-sudo systemctl daemon-reload && sudo systemctl restart kubelet
-kubectl uncordon <node>
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data   # 1. Move workloads off the node
+# 2. Upgrade kubeadm package → kubeadm upgrade (apply|node) → upgrade kubelet & kubectl packages
+sudo systemctl daemon-reload && sudo systemctl restart kubelet    # 3. Restart kubelet on the new version
+kubectl uncordon <node>                                           # 4. Allow scheduling again
 ```
 
 **Important paths:**
@@ -1006,134 +1126,134 @@ kubectl uncordon <node>
 
 ---
 
-## 29. etcd Backup & Restore
+## 30. etcd Backup & Restore
+
+etcd stores all cluster state. Back it up regularly on self-managed clusters.
 
 ```bash
-export ETCDCTL_API=3
+export ETCDCTL_API=3                                   # Use the v3 API
 CERTS="--cacert=/etc/kubernetes/pki/etcd/ca.crt \
        --cert=/etc/kubernetes/pki/etcd/server.crt \
        --key=/etc/kubernetes/pki/etcd/server.key \
-       --endpoints=https://127.0.0.1:2379"
+       --endpoints=https://127.0.0.1:2379"             # Reusable connection flags
 
-# Health / members
-etcdctl $CERTS endpoint health
-etcdctl $CERTS endpoint status -w table
-etcdctl $CERTS member list -w table
+etcdctl $CERTS endpoint health                         # Is etcd healthy?
+etcdctl $CERTS endpoint status -w table                # Leader, DB size, revision
+etcdctl $CERTS member list -w table                    # List etcd members
 
-# Backup
-etcdctl $CERTS snapshot save /backup/etcd-$(date +%F).db
+etcdctl $CERTS snapshot save /backup/etcd-$(date +%F).db   # Take a snapshot backup
 
-# Verify snapshot (newer releases use etcdutl)
-etcdutl snapshot status /backup/etcd.db -w table
+etcdutl snapshot status /backup/etcd.db -w table       # Verify a snapshot
 
-# Restore to a new data dir, then point the etcd static pod at it
-etcdutl snapshot restore /backup/etcd.db --data-dir=/var/lib/etcd-restored
-#   edit /etc/kubernetes/manifests/etcd.yaml → hostPath for etcd-data = /var/lib/etcd-restored
+etcdutl snapshot restore /backup/etcd.db --data-dir=/var/lib/etcd-restored   # Restore to a new data dir
+#   then edit /etc/kubernetes/manifests/etcd.yaml → hostPath for etcd-data = /var/lib/etcd-restored
 
-# Inspect keys
-etcdctl $CERTS get /registry/pods --prefix --keys-only | head
+etcdctl $CERTS get /registry/pods --prefix --keys-only | head   # Browse stored keys
 ```
 
 ---
 
-## 30. Container Runtime (crictl)
+## 31. Container Runtime (crictl)
+
+`crictl` talks directly to the container runtime on a node. Useful when kubectl or the API server is down.
 
 ```bash
-sudo crictl info
-sudo crictl ps                     # running containers
-sudo crictl ps -a                  # including exited
-sudo crictl pods
-sudo crictl pods --name <pod>
-sudo crictl images
-sudo crictl pull nginx:1.27
-sudo crictl rmi <image>
-sudo crictl rmi --prune            # remove unused images
-sudo crictl logs <container-id>
-sudo crictl logs -f --tail=50 <container-id>
-sudo crictl exec -it <container-id> sh
-sudo crictl inspect <container-id>
-sudo crictl inspectp <pod-id>
-sudo crictl stats
-sudo crictl stop <container-id>
-sudo crictl rm <container-id>
-sudo crictl stopp <pod-id> && sudo crictl rmp <pod-id>
+sudo crictl info                   # Runtime status and config
+sudo crictl ps                     # Running containers
+sudo crictl ps -a                  # All containers, including exited
+sudo crictl pods                   # Pod sandboxes on this node
+sudo crictl pods --name <pod>      # Find a pod by name
+sudo crictl images                 # Images on this node
+sudo crictl pull nginx:1.27        # Pull an image
+sudo crictl rmi <image>            # Remove an image
+sudo crictl rmi --prune            # Remove all unused images
+sudo crictl logs <container-id>    # Container logs
+sudo crictl logs -f --tail=50 <container-id>   # Follow the last 50 lines
+sudo crictl exec -it <container-id> sh         # Shell into a container
+sudo crictl inspect <container-id> # Container details (JSON)
+sudo crictl inspectp <pod-id>      # Pod sandbox details
+sudo crictl stats                  # Container resource usage
+sudo crictl stop <container-id>    # Stop a container
+sudo crictl rm <container-id>      # Remove a container
+sudo crictl stopp <pod-id> && sudo crictl rmp <pod-id>   # Stop and remove a pod sandbox
 
 # containerd native CLI
-sudo ctr -n k8s.io containers list
-sudo ctr -n k8s.io images list
-sudo nerdctl -n k8s.io ps           # if nerdctl is installed
+sudo ctr -n k8s.io containers list # Containers in the Kubernetes namespace
+sudo ctr -n k8s.io images list     # Images in the Kubernetes namespace
+sudo nerdctl -n k8s.io ps          # Docker-like CLI for containerd (if installed)
 ```
 
 ---
 
-## 31. Node-level Troubleshooting
+## 32. Node-level Troubleshooting
+
+When a node is `NotReady`, check kubelet, the runtime and networking directly on the node.
 
 ```bash
-# kubelet
-systemctl status kubelet
-sudo systemctl restart kubelet
-journalctl -u kubelet -f
-journalctl -u kubelet --since "10 min ago" --no-pager
+systemctl status kubelet                           # Is kubelet running?
+sudo systemctl restart kubelet                     # Restart kubelet
+journalctl -u kubelet -f                           # Follow kubelet logs
+journalctl -u kubelet --since "10 min ago" --no-pager   # Recent kubelet logs
 
-# Container runtime
-systemctl status containerd
-journalctl -u containerd -f
+systemctl status containerd                        # Is the runtime running?
+journalctl -u containerd -f                        # Follow runtime logs
 
-# Static pods & control-plane logs
-ls /etc/kubernetes/manifests/
-ls /var/log/pods/
-ls /var/log/containers/
+ls /etc/kubernetes/manifests/                      # Static pod manifests
+ls /var/log/pods/                                  # Pod log folders
+ls /var/log/containers/                            # Container log symlinks
 
-# Networking basics
-ip a; ip route
-sudo iptables -t nat -L KUBE-SERVICES | head
-sudo ipvsadm -Ln                    # if kube-proxy uses IPVS
-cat /etc/cni/net.d/*
-ls /opt/cni/bin/
+ip a; ip route                                     # Interfaces and routes
+sudo iptables -t nat -L KUBE-SERVICES | head       # kube-proxy service rules (iptables mode)
+sudo ipvsadm -Ln                                   # kube-proxy rules (IPVS mode)
+cat /etc/cni/net.d/*                               # CNI network config
+ls /opt/cni/bin/                                   # Installed CNI plugins
 
-# Resources
-df -h; free -m; top
+df -h; free -m; top                                # Disk, memory and CPU on the node
 ```
 
 ---
 
-## 32. Helm Essentials
+## 33. Helm Essentials
+
+Helm is the package manager for Kubernetes. Charts are packages; releases are installed instances.
 
 ```bash
-helm version
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm repo update
-helm repo list
-helm search repo nginx
-helm search hub prometheus
-helm show values bitnami/nginx > values.yaml
-helm show chart bitnami/nginx
+helm version                                           # Show Helm version
+helm repo add bitnami https://charts.bitnami.com/bitnami   # Add a chart repository
+helm repo update                                       # Refresh repository indexes
+helm repo list                                         # List added repositories
+helm search repo nginx                                 # Search added repos
+helm search hub prometheus                             # Search Artifact Hub
+helm show values bitnami/nginx > values.yaml           # Save a chart's default values
+helm show chart bitnami/nginx                          # Show chart metadata
 
-helm install web bitnami/nginx -n web --create-namespace
-helm install web bitnami/nginx -f values.yaml --set replicaCount=3
-helm install web ./mychart --dry-run --debug
-helm upgrade web bitnami/nginx -f values.yaml
-helm upgrade --install web bitnami/nginx -n web --create-namespace --atomic --wait
-helm list -A
-helm status web -n web
-helm history web -n web
-helm rollback web 1 -n web
-helm get values web -n web
-helm get manifest web -n web
-helm uninstall web -n web
+helm install web bitnami/nginx -n web --create-namespace   # Install a chart
+helm install web bitnami/nginx -f values.yaml --set replicaCount=3   # Install with custom values
+helm install web ./mychart --dry-run --debug           # Render and validate without installing
+helm upgrade web bitnami/nginx -f values.yaml          # Upgrade a release
+helm upgrade --install web bitnami/nginx -n web --create-namespace --atomic --wait   # Install or upgrade, roll back on failure
+helm list -A                                           # List releases in all namespaces
+helm status web -n web                                 # Release status and notes
+helm history web -n web                                # Release revision history
+helm rollback web 1 -n web                             # Roll back to revision 1
+helm get values web -n web                             # Values used by a release
+helm get manifest web -n web                           # Rendered YAML of a release
+helm uninstall web -n web                              # Remove a release
 
-helm template web ./mychart -f values.yaml > rendered.yaml
-helm lint ./mychart
-helm create mychart
-helm package ./mychart
-helm dependency update ./mychart
-helm pull bitnami/nginx --untar
-helm install web oci://registry.example.com/charts/web --version 1.2.3
+helm template web ./mychart -f values.yaml > rendered.yaml   # Render templates locally
+helm lint ./mychart                                    # Check a chart for errors
+helm create mychart                                    # Scaffold a new chart
+helm package ./mychart                                 # Package a chart into a .tgz
+helm dependency update ./mychart                       # Download chart dependencies
+helm pull bitnami/nginx --untar                        # Download and extract a chart
+helm install web oci://registry.example.com/charts/web --version 1.2.3   # Install from an OCI registry
 ```
 
 ---
 
-## 33. Global Flags Reference
+## 34. Global Flags Reference
+
+Flags that work with most kubectl commands.
 
 | Flag | Purpose |
 |---|---|
@@ -1160,13 +1280,15 @@ helm install web oci://registry.example.com/charts/web --version 1.2.3
 | `--insecure-skip-tls-verify` | Skip TLS checks (avoid in prod) |
 
 ```bash
-kubectl options            # list all global flags
-kubectl <command> --help   # per-command help & examples
+kubectl options            # List all global flags
+kubectl <command> --help   # Help and examples for any command
 ```
 
 ---
 
-## 34. Pod Phases & Common Errors
+## 35. Pod Phases & Common Errors
+
+What each common pod status usually means and the first command to run.
 
 | Status | Usual cause | First command |
 |---|---|---|
@@ -1183,10 +1305,12 @@ kubectl <command> --help   # per-command help & examples
 
 ---
 
-## 35. YAML Skeletons
+## 36. YAML Skeletons
+
+Minimal, working manifests to start from.
 
 <details>
-<summary><b>Pod</b></summary>
+<summary><b>Pod</b> — single container with resources and probes</summary>
 
 ```yaml
 apiVersion: v1
@@ -1200,19 +1324,19 @@ spec:
       image: nginx:1.27
       ports: [{ containerPort: 80 }]
       resources:
-        requests: { cpu: 100m, memory: 128Mi }
-        limits:   { cpu: 500m, memory: 256Mi }
-      readinessProbe:
+        requests: { cpu: 100m, memory: 128Mi }   # Guaranteed minimum
+        limits:   { cpu: 500m, memory: 256Mi }   # Hard maximum
+      readinessProbe:                            # When to send traffic
         httpGet: { path: /, port: 80 }
         initialDelaySeconds: 5
-      livenessProbe:
+      livenessProbe:                             # When to restart
         httpGet: { path: /, port: 80 }
         periodSeconds: 10
 ```
 </details>
 
 <details>
-<summary><b>Deployment + Service</b></summary>
+<summary><b>Deployment + Service</b> — replicated app exposed inside the cluster</summary>
 
 ```yaml
 apiVersion: apps/v1
@@ -1225,7 +1349,7 @@ spec:
     matchLabels: { app: web }
   strategy:
     type: RollingUpdate
-    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }   # Zero-downtime updates
   template:
     metadata:
       labels: { app: web }
@@ -1235,7 +1359,7 @@ spec:
           image: nginx:1.27
           ports: [{ containerPort: 80 }]
           envFrom:
-            - configMapRef: { name: app-cfg }
+            - configMapRef: { name: app-cfg }   # Load all keys as env vars
 ---
 apiVersion: v1
 kind: Service
@@ -1243,7 +1367,7 @@ metadata:
   name: web
 spec:
   type: ClusterIP
-  selector: { app: web }
+  selector: { app: web }                         # Routes to pods with this label
   ports:
     - port: 80
       targetPort: 80
@@ -1251,7 +1375,7 @@ spec:
 </details>
 
 <details>
-<summary><b>Ingress</b></summary>
+<summary><b>Ingress</b> — HTTP(S) routing from outside the cluster</summary>
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -1262,7 +1386,7 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts: [example.com]
-      secretName: web-tls
+      secretName: web-tls                        # TLS certificate secret
   rules:
     - host: example.com
       http:
@@ -1275,7 +1399,7 @@ spec:
 </details>
 
 <details>
-<summary><b>PersistentVolumeClaim</b></summary>
+<summary><b>PersistentVolumeClaim</b> — request storage</summary>
 
 ```yaml
 apiVersion: v1
@@ -1291,7 +1415,7 @@ spec:
 </details>
 
 <details>
-<summary><b>NetworkPolicy (default deny + allow from app)</b></summary>
+<summary><b>NetworkPolicy</b> — default deny, then allow frontend → api</summary>
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -1299,7 +1423,7 @@ kind: NetworkPolicy
 metadata:
   name: default-deny-ingress
 spec:
-  podSelector: {}
+  podSelector: {}                                # Applies to all pods in the namespace
   policyTypes: [Ingress]
 ---
 apiVersion: networking.k8s.io/v1
@@ -1319,7 +1443,7 @@ spec:
 </details>
 
 <details>
-<summary><b>CronJob</b></summary>
+<summary><b>CronJob</b> — scheduled task</summary>
 
 ```yaml
 apiVersion: batch/v1
@@ -1327,8 +1451,8 @@ kind: CronJob
 metadata:
   name: backup
 spec:
-  schedule: "0 2 * * *"
-  concurrencyPolicy: Forbid
+  schedule: "0 2 * * *"                          # Every day at 02:00
+  concurrencyPolicy: Forbid                      # Skip if previous run still active
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
   jobTemplate:
@@ -1345,7 +1469,7 @@ spec:
 </details>
 
 <details>
-<summary><b>Role + RoleBinding</b></summary>
+<summary><b>Role + RoleBinding</b> — read-only pod access for a service account</summary>
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -1381,6 +1505,7 @@ roleRef:
 - [kubectl reference](https://kubernetes.io/docs/reference/kubectl/)
 - [Official kubectl Quick Reference](https://kubernetes.io/docs/reference/kubectl/quick-reference/)
 - [JSONPath support](https://kubernetes.io/docs/reference/kubectl/jsonpath/)
+- [Minikube docs](https://minikube.sigs.k8s.io/docs/)
 - [kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/)
 - [Helm docs](https://helm.sh/docs/)
 
