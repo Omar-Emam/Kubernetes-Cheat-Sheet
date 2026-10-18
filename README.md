@@ -1,6 +1,6 @@
 # ☸️ Kubernetes Cheat Sheet
 
-A practical, copy-paste-ready reference for `kubectl` and the surrounding Kubernetes tooling (`minikube`, `kubeadm`, `crictl`, `etcdctl`, `helm`, `kustomize`). Every command has a short description.
+A refresher and copy-paste-ready reference for Kubernetes. **Part 1** explains the concepts and the different types of each thing (Services, workloads, Ingress, volumes and so on). **Part 2** lists the commands for `kubectl` and the surrounding tooling (`minikube`, `kubeadm`, `crictl`, `etcdctl`, `helm`, `kustomize`), each with a short description.
 
 > **Conventions used below**
 > `<pod>` = resource name · `-n <ns>` = namespace · `-A` = all namespaces · `-l` = label selector
@@ -9,6 +9,29 @@ A practical, copy-paste-ready reference for `kubectl` and the surrounding Kubern
 ---
 
 ## 📑 Table of Contents
+
+### Part 1 — Concepts Refresher
+
+- [Architecture](#architecture)
+- [How Kubernetes Works: Desired State](#how-kubernetes-works-desired-state)
+- [Workload Types](#workload-types)
+- [Inside a Pod](#inside-a-pod)
+- [Probes](#probes)
+- [Deployment Strategies](#deployment-strategies)
+- [Service Types](#service-types)
+- [Ingress and Gateway API](#ingress-and-gateway-api)
+- [Networking and Network Policies](#networking-and-network-policies)
+- [Configuration: ConfigMaps and Secrets](#configuration-configmaps-and-secrets)
+- [Volume and Storage Types](#volume-and-storage-types)
+- [Resources and QoS Classes](#resources-and-qos-classes)
+- [Scheduling Controls](#scheduling-controls)
+- [Autoscaling Types](#autoscaling-types)
+- [Availability and Disruptions](#availability-and-disruptions)
+- [Security and Access](#security-and-access)
+- [Organizing: Namespaces, Labels, Annotations](#organizing-namespaces-labels-annotations)
+- [Extending Kubernetes](#extending-kubernetes)
+
+### Part 2 — Commands
 
 1. [Setup, Aliases & Autocompletion](#1-setup-aliases--autocompletion)
 2. [Local Cluster with Minikube](#2-local-cluster-with-minikube)
@@ -48,6 +71,456 @@ A practical, copy-paste-ready reference for `kubectl` and the surrounding Kubern
 36. [YAML Skeletons](#36-yaml-skeletons)
 
 ---
+
+# Part 1 — Concepts Refresher
+
+## Architecture
+
+A cluster has a **control plane** that makes decisions and **worker nodes** that run your containers.
+
+```
+                ┌──────────────────── Control Plane ────────────────────┐
+ kubectl ─────► │ kube-apiserver ◄──► etcd                               │
+                │      ▲   ▲                                             │
+                │      │   └── kube-scheduler                            │
+                │      └────── kube-controller-manager / cloud-controller│
+                └──────┼─────────────────────────────────────────────────┘
+                       │
+        ┌──────────────┴──────────────┐
+   ┌── Worker Node ──┐          ┌── Worker Node ──┐
+   │ kubelet         │          │ kubelet         │
+   │ kube-proxy      │          │ kube-proxy      │
+   │ container runtime│         │ container runtime│
+   │ [pods...]       │          │ [pods...]       │
+   └─────────────────┘          └─────────────────┘
+```
+
+| Component | Where | What it does |
+|---|---|---|
+| **kube-apiserver** | Control plane | The front door. Every command and component talks to the cluster through it. Validates and stores objects. |
+| **etcd** | Control plane | Key-value database holding the entire cluster state. Back it up. |
+| **kube-scheduler** | Control plane | Picks which node each new pod runs on, based on resources, affinity, taints and so on. |
+| **kube-controller-manager** | Control plane | Runs the controllers (Deployment, ReplicaSet, Node, Job…) that keep actual state matching desired state. |
+| **cloud-controller-manager** | Control plane | Talks to the cloud provider: creates load balancers, manages node lifecycle and routes. |
+| **kubelet** | Every node | Agent that makes sure the containers described in pod specs are running and healthy on its node. |
+| **kube-proxy** | Every node | Programs iptables/IPVS rules so Service IPs route to pods. Some CNIs (e.g. Cilium) replace it. |
+| **Container runtime** | Every node | Actually runs containers (containerd, CRI-O) through the Container Runtime Interface (CRI). |
+| **CoreDNS** | Add-on (pods) | Cluster DNS, so `my-svc.my-ns` resolves to a Service IP. |
+| **CNI plugin** | Add-on | Gives pods IPs and connects them across nodes (Calico, Cilium, Flannel, Azure CNI…). |
+
+**Managed vs self-managed:** on AKS, EKS and GKE the cloud runs the control plane for you; you only see worker nodes. With kubeadm or minikube you run everything yourself.
+
+---
+
+## How Kubernetes Works: Desired State
+
+- You **declare** what you want (a YAML object with a `spec`).
+- Controllers **observe** the actual state (the object's `status`) and **act** to close the gap. This is the reconciliation (control) loop.
+- Example: a Deployment says `replicas: 3`. If a pod dies, the ReplicaSet controller sees 2 and creates a new one.
+
+Every object has the same basic shape:
+
+```yaml
+apiVersion: apps/v1     # API group/version
+kind: Deployment        # Object type
+metadata:               # Name, namespace, labels, annotations
+  name: web
+spec: {}                # What you want
+status: {}              # What actually exists (written by Kubernetes)
+```
+
+**Owner chain:** `Deployment → ReplicaSet → Pod`, `CronJob → Job → Pod`. Deleting the owner deletes its children (cascading deletion).
+
+---
+
+## Workload Types
+
+| Type | Use it for | Key behaviour |
+|---|---|---|
+| **Pod** | Smallest deployable unit; one or more containers sharing network and storage | Not self-healing on its own. Rarely created directly. |
+| **ReplicaSet** | Keeping N identical pods running | Managed by Deployments; you almost never create one yourself. |
+| **Deployment** | Stateless apps (web, APIs) | Rolling updates, rollbacks, scaling. Pods are interchangeable with random names. |
+| **StatefulSet** | Stateful apps (databases, Kafka, ZooKeeper) | Stable names (`db-0`, `db-1`), stable per-pod storage, ordered start/stop. Needs a headless Service. |
+| **DaemonSet** | One pod per node (log agents, monitoring, CNI, CSI) | New nodes get the pod automatically. |
+| **Job** | Run-to-completion tasks (migrations, batch) | Retries on failure (`backoffLimit`); supports `parallelism` and `completions`. |
+| **CronJob** | Scheduled Jobs (backups, reports) | Creates a Job on a cron schedule. |
+| **ReplicationController** | Legacy | Replaced by ReplicaSet/Deployment. |
+
+**Quick pick:** stateless → Deployment · needs stable identity or disk → StatefulSet · on every node → DaemonSet · runs once → Job · runs on a schedule → CronJob.
+
+---
+
+## Inside a Pod
+
+**Container types within a pod**
+
+| Type | Purpose |
+|---|---|
+| **App container** | Your main workload. |
+| **Init container** | Runs to completion **before** app containers start (wait for DB, run migrations, fetch config). Run one at a time, in order. |
+| **Sidecar container** | Helper that runs **alongside** the app for the pod's lifetime (log shipper, proxy, service mesh). Native sidecars are init containers with `restartPolicy: Always`. |
+| **Ephemeral container** | Added temporarily to a running pod for debugging (`kubectl debug`). |
+
+**Pod phases:** `Pending` → `Running` → `Succeeded` / `Failed` (or `Unknown` if the node is unreachable).
+
+**restartPolicy** (pod level)
+
+| Value | Meaning | Typical for |
+|---|---|---|
+| `Always` | Always restart containers (default) | Deployments, StatefulSets, DaemonSets |
+| `OnFailure` | Restart only on non-zero exit | Jobs |
+| `Never` | Never restart | One-off pods, Jobs |
+
+**imagePullPolicy**
+
+| Value | Meaning |
+|---|---|
+| `Always` | Pull every time the container starts (default for `:latest` or no tag). |
+| `IfNotPresent` | Pull only if the image is not on the node (default for specific tags). |
+| `Never` | Only use a local image. |
+
+---
+
+## Probes
+
+Probes are health checks the kubelet runs against containers.
+
+| Probe | Question it answers | On failure |
+|---|---|---|
+| **startupProbe** | Has the app finished starting? | Keeps retrying; other probes wait until it passes. Container restarted if it never passes. Use for slow-starting apps. |
+| **readinessProbe** | Can it receive traffic right now? | Pod removed from Service endpoints (no restart). |
+| **livenessProbe** | Is it still alive or stuck? | Container is **restarted**. |
+
+**Probe mechanisms:** `httpGet` (2xx/3xx = healthy) · `tcpSocket` (port opens) · `exec` (command exits 0) · `grpc` (gRPC health check).
+
+**Tuning fields:** `initialDelaySeconds`, `periodSeconds`, `timeoutSeconds`, `failureThreshold`, `successThreshold`.
+
+> 💡 Never point the liveness probe at a dependency (like the database). If the DB goes down, every pod restarts in a loop.
+
+---
+
+## Deployment Strategies
+
+| Strategy | How it works | Built in? |
+|---|---|---|
+| **RollingUpdate** | Replaces pods gradually. `maxSurge` = extra pods allowed; `maxUnavailable` = pods allowed down. | ✅ Default |
+| **Recreate** | Kills all old pods, then starts new ones. Causes downtime. Use when two versions can't run together. | ✅ |
+| **Blue/Green** | Run old (blue) and new (green) side by side, then switch the Service selector. | Manual, or Argo Rollouts / Flagger |
+| **Canary** | Send a small % of traffic to the new version, increase gradually. | Gateway API weights, service mesh, Argo Rollouts / Flagger |
+
+---
+
+## Service Types
+
+A **Service** gives a stable IP and DNS name to a changing set of pods, selected by labels.
+
+| Type | Reachable from | How |
+|---|---|---|
+| **ClusterIP** (default) | Inside the cluster only | Virtual IP, load-balanced across pods. |
+| **NodePort** | Outside, via `<any-node-IP>:<port>` | Opens the same port (30000–32767) on every node, plus a ClusterIP. |
+| **LoadBalancer** | Outside, via a cloud load balancer | Asks the cloud provider for an external LB, plus NodePort and ClusterIP. |
+| **ExternalName** | Inside the cluster | DNS CNAME to an external hostname. No proxying, no selector. |
+| **Headless** (`clusterIP: None`) | Inside the cluster | No virtual IP. DNS returns individual pod IPs. Used by StatefulSets. |
+
+**Port terms:** `port` = the Service's port · `targetPort` = the container's port · `nodePort` = the port on each node.
+
+**Other options:** `sessionAffinity: ClientIP` for sticky sessions · `externalTrafficPolicy: Local` keeps the client source IP and avoids extra hops · `internalTrafficPolicy: Local` routes only to pods on the same node.
+
+**Without a selector:** a Service with no selector plus manual EndpointSlices points at things outside the cluster (e.g. an external DB by IP).
+
+---
+
+## Ingress and Gateway API
+
+Services work at layer 4 (TCP/UDP). For **HTTP(S) routing** by hostname and path, with TLS termination, you use **Ingress** or its successor **Gateway API**.
+
+**Ingress**
+
+- An **Ingress** object holds routing rules: `host` + `path` → Service.
+- An **Ingress object does nothing by itself.** You need an **Ingress controller** running in the cluster to read the rules and route traffic.
+- **IngressClass** says which controller handles which Ingress (`ingressClassName: nginx`).
+- **pathType:** `Prefix` (matches `/api` and `/api/...`) · `Exact` (only that path) · `ImplementationSpecific` (controller decides).
+- **TLS:** reference a `kubernetes.io/tls` Secret in `spec.tls`.
+- Advanced features (rewrites, rate limits, auth) are controller-specific **annotations**, so they don't carry over between controllers.
+- The Ingress API is **frozen**: still supported, but no new features.
+
+**Common Ingress controllers:** Traefik · HAProxy · Kong · F5 NGINX Ingress Controller · Contour · Azure Application Gateway for Containers · AWS Load Balancer Controller · GKE Ingress.
+
+> ⚠️ The community **ingress-nginx** controller (the one in most tutorials) was **retired in March 2026**: no more releases or security fixes. Existing installs keep working. For new setups, use Gateway API or another maintained controller. To check whether you run it: `kubectl get pods -A -l app.kubernetes.io/name=ingress-nginx`. It is a different project from F5's NGINX Ingress Controller, which is still maintained.
+
+**Gateway API** is the successor to Ingress. It splits responsibilities by role:
+
+| Resource | Owned by | Purpose |
+|---|---|---|
+| **GatewayClass** | Infrastructure provider | Which implementation (like IngressClass). |
+| **Gateway** | Cluster operator | The actual listener: ports, protocols, hostnames, TLS certs. |
+| **HTTPRoute** | App developer | Routing rules: host, path, headers, query → Services, with **traffic weights** for canaries. |
+| **GRPCRoute / TLSRoute / TCPRoute / UDPRoute** | App developer | Routing for other protocols (some are experimental). |
+| **ReferenceGrant** | Namespace owner | Allows a route to reference a Service in another namespace. |
+
+**Ingress vs Gateway API at a glance**
+
+| | Ingress | Gateway API |
+|---|---|---|
+| Protocols | HTTP/HTTPS | HTTP, HTTPS, gRPC, TLS, TCP, UDP |
+| Traffic splitting | Annotations (controller-specific) | Built in (`weight`) |
+| Header/method matching | Annotations | Built in |
+| Role separation | One object for everything | Infra / operator / developer split |
+| Portability | Low (annotations differ) | High (standard spec) |
+| Status | Frozen | Actively developed, recommended |
+
+**Gateway API implementations:** Envoy Gateway · Istio · Cilium · NGINX Gateway Fabric · Traefik · Kong · Contour · cloud implementations (GKE Gateway, AKS Application Gateway for Containers, AWS Gateway API Controller). The `ingress2gateway` tool helps translate existing Ingress objects.
+
+---
+
+## Networking and Network Policies
+
+**The Kubernetes network model**
+- Every pod gets its own IP.
+- Pods can reach all other pods without NAT, across nodes.
+- The **CNI plugin** implements this.
+
+**Traffic types**
+
+| Direction | Handled by |
+|---|---|
+| Pod ↔ Pod | CNI |
+| Pod → Service | kube-proxy (iptables/IPVS) or eBPF (Cilium) |
+| Outside → Service | NodePort / LoadBalancer / Ingress / Gateway |
+| Pod → Outside | Node SNAT or egress gateway |
+
+**DNS names:** `<svc>.<ns>.svc.cluster.local` · short form `<svc>` within the same namespace, `<svc>.<ns>` across namespaces.
+
+**NetworkPolicy** is a firewall for pods.
+- By default **all traffic is allowed**.
+- Once any policy selects a pod, only traffic explicitly allowed for that direction is permitted.
+- `policyTypes`: `Ingress` (incoming), `Egress` (outgoing).
+- Selectors: `podSelector`, `namespaceSelector`, `ipBlock`.
+- **Requires a CNI that enforces it** (Calico, Cilium, Azure NPM…). Flannel alone ignores NetworkPolicies.
+- Common pattern: default-deny all, then allow specific flows. Remember to allow DNS egress (port 53) when you deny egress.
+
+**Popular CNIs:** Calico (policies, BGP) · Cilium (eBPF, observability, can replace kube-proxy) · Flannel (simple overlay) · Azure CNI / AWS VPC CNI (pods get VNet/VPC IPs).
+
+---
+
+## Configuration: ConfigMaps and Secrets
+
+| Object | Holds | Notes |
+|---|---|---|
+| **ConfigMap** | Non-sensitive config (key/values or whole files) | Max 1 MiB. Can be `immutable: true`. |
+| **Secret** | Sensitive data | Base64-encoded, **not encrypted** by default. Enable encryption at rest and limit RBAC. |
+
+**Ways to consume them in a pod**
+
+| Method | Updates live when changed? |
+|---|---|
+| Env var from one key (`valueFrom`) | ❌ Needs a pod restart |
+| All keys as env vars (`envFrom`) | ❌ Needs a pod restart |
+| Mounted as a volume (files) | ✅ Eventually (not with `subPath`) |
+
+**Secret types**
+
+| Type | Use |
+|---|---|
+| `Opaque` | Generic key/values (default). |
+| `kubernetes.io/tls` | TLS cert and key (`tls.crt`, `tls.key`) for Ingress/Gateway. |
+| `kubernetes.io/dockerconfigjson` | Private registry credentials (`imagePullSecrets`). |
+| `kubernetes.io/basic-auth` | Username and password. |
+| `kubernetes.io/ssh-auth` | SSH private key. |
+| `kubernetes.io/service-account-token` | Long-lived SA token (legacy; prefer `kubectl create token` / projected tokens). |
+| `bootstrap.kubernetes.io/token` | Node bootstrap tokens (kubeadm join). |
+
+**External secret managers:** External Secrets Operator · Secrets Store CSI Driver (Azure Key Vault, AWS Secrets Manager, Vault) · Sealed Secrets (encrypted secrets safe to commit to Git).
+
+---
+
+## Volume and Storage Types
+
+Container filesystems are temporary. Volumes give data a life beyond a single container.
+
+**Volume types (in the pod spec)**
+
+| Type | Lifetime | Use |
+|---|---|---|
+| `emptyDir` | Pod's lifetime | Scratch space, sharing files between containers. `medium: Memory` for tmpfs. |
+| `hostPath` | Node's lifetime | Mount a node folder. Avoid in apps (security risk); used by system DaemonSets. |
+| `configMap` / `secret` | Object's lifetime | Mount config or secrets as files. |
+| `projected` | — | Combine configMap, secret, downwardAPI and SA tokens in one mount. |
+| `downwardAPI` | — | Expose pod info (name, labels, limits) as files. |
+| `persistentVolumeClaim` | Independent of the pod | Durable storage via a PVC. |
+| `ephemeral` | Pod's lifetime | Per-pod volume created from a StorageClass, deleted with the pod. |
+| `csi` | Depends on driver | Inline CSI volumes (e.g. Secrets Store CSI). |
+| `nfs` | External | Mount an NFS share directly. |
+
+**Persistent storage objects**
+
+| Object | Role |
+|---|---|
+| **PersistentVolume (PV)** | A piece of actual storage (disk, file share). Cluster-scoped. |
+| **PersistentVolumeClaim (PVC)** | A request for storage by size and access mode. Namespaced. Binds to a PV. |
+| **StorageClass (SC)** | Template for **dynamic provisioning**: creates PVs on demand when a PVC asks. |
+| **CSI driver** | Plugin that connects Kubernetes to a storage system (Azure Disk, EBS, Ceph…). |
+| **VolumeSnapshot** | Point-in-time snapshot of a PVC (needs CSI snapshot support). |
+
+**Provisioning:** *static* (admin creates PVs first) vs *dynamic* (StorageClass creates them automatically, the norm on cloud).
+
+**Access modes**
+
+| Mode | Short | Meaning |
+|---|---|---|
+| ReadWriteOnce | `RWO` | Read-write by pods on **one node**. Typical for block disks. |
+| ReadOnlyMany | `ROX` | Read-only by many nodes. |
+| ReadWriteMany | `RWX` | Read-write by many nodes. Needs file storage (NFS, Azure Files, EFS). |
+| ReadWriteOncePod | `RWOP` | Read-write by **one pod** only. |
+
+**Reclaim policy** (what happens to the PV when the PVC is deleted): `Delete` (default for dynamic, data gone) · `Retain` (keep data, manual cleanup).
+
+**volumeBindingMode:** `Immediate` (create the volume now) · `WaitForFirstConsumer` (wait until a pod is scheduled, so the disk is created in the right zone).
+
+**volumeMode:** `Filesystem` (default, mounted as a folder) · `Block` (raw block device).
+
+---
+
+## Resources and QoS Classes
+
+| Field | Meaning |
+|---|---|
+| **requests** | What the scheduler reserves for the container. Used to decide placement. |
+| **limits** | The hard ceiling. Exceed **memory** → container is **OOMKilled**. Exceed **CPU** → container is **throttled** (not killed). |
+
+**Units:** CPU `1` = 1 vCPU, `500m` = half a core · Memory `Mi`/`Gi` (binary) vs `M`/`G` (decimal).
+
+**QoS classes** (decide who gets evicted first when a node runs out of memory)
+
+| Class | Condition | Eviction order |
+|---|---|---|
+| **Guaranteed** | Every container has requests = limits for CPU and memory | Last |
+| **Burstable** | At least one request or limit set, but not Guaranteed | Middle |
+| **BestEffort** | No requests or limits at all | First |
+
+**Namespace guardrails:** **ResourceQuota** caps total usage in a namespace · **LimitRange** sets default and min/max requests/limits per container.
+
+---
+
+## Scheduling Controls
+
+Ways to influence **where** pods run.
+
+| Mechanism | Who it applies to | Effect |
+|---|---|---|
+| **nodeSelector** | Pod | Run only on nodes with these labels. Simple, hard requirement. |
+| **Node affinity** | Pod | Like nodeSelector but expressive. `required...` (hard) or `preferred...` (soft). |
+| **Pod affinity** | Pod | Run **near** pods with certain labels (same node/zone), e.g. app next to its cache. |
+| **Pod anti-affinity** | Pod | Run **away** from certain pods, e.g. spread replicas across nodes. |
+| **Taints** | Node | Repel pods. Effects: `NoSchedule`, `PreferNoSchedule`, `NoExecute` (also evicts running pods). |
+| **Tolerations** | Pod | Allow a pod onto a tainted node. It doesn't force it there; combine with affinity for dedicated nodes. |
+| **Topology spread constraints** | Pod | Spread replicas evenly across zones or nodes (`maxSkew`). |
+| **PriorityClass** | Pod | Higher-priority pods schedule first and can **preempt** (evict) lower ones. |
+| **nodeName** | Pod | Skip the scheduler and pin to a specific node. Mostly for debugging. |
+
+**Taints vs affinity in one line:** taints keep pods **out**; affinity pulls pods **in**.
+
+---
+
+## Autoscaling Types
+
+| Autoscaler | Scales | Based on |
+|---|---|---|
+| **HPA** (Horizontal Pod Autoscaler) | Number of **pods** | CPU, memory, or custom/external metrics. Needs metrics-server. |
+| **VPA** (Vertical Pod Autoscaler) | **Requests/limits** of pods | Historical usage. Add-on; don't combine with HPA on the same CPU/memory metric. |
+| **Cluster Autoscaler** | Number of **nodes** | Pending pods that can't fit / underused nodes. |
+| **Karpenter** | **Nodes** (provisions right-sized ones) | Pending pods. Popular on AWS, also available for AKS (Node Auto Provisioning). |
+| **KEDA** | **Pods**, including to zero | Event sources (queue length, Kafka lag, cron, HTTP). |
+
+---
+
+## Availability and Disruptions
+
+| Concept | Meaning |
+|---|---|
+| **Voluntary disruption** | Planned: drain, upgrade, scale-down, deleting a pod. |
+| **Involuntary disruption** | Unplanned: node crash, kernel panic, out of resources. |
+| **PodDisruptionBudget (PDB)** | Limits how many pods of an app can be down during **voluntary** disruptions (`minAvailable` or `maxUnavailable`). `kubectl drain` respects it. |
+| **Replicas + anti-affinity / topology spread** | Protect against **involuntary** disruptions by not putting all pods on one node or zone. |
+| **Graceful shutdown** | On delete, the pod gets `SIGTERM`, runs any `preStop` hook, then `SIGKILL` after `terminationGracePeriodSeconds` (default 30s). |
+
+---
+
+## Security and Access
+
+**How a request is checked:** Authentication (who are you?) → Authorization (are you allowed?) → Admission control (is this object acceptable?).
+
+**Identities**
+
+| Type | What it is |
+|---|---|
+| **User** | A human. Kubernetes has **no User object**; users come from certificates, OIDC (Entra ID, Google) or cloud IAM. |
+| **Group** | A set of users, also from the identity provider. |
+| **ServiceAccount** | An identity for **pods/processes**. A real namespaced object. Tokens are short-lived and auto-mounted. |
+
+**RBAC objects**
+
+| Object | Scope | Purpose |
+|---|---|---|
+| **Role** | One namespace | Set of permissions (verbs on resources). |
+| **ClusterRole** | Cluster-wide | Permissions for cluster resources (nodes, PVs) or reusable across namespaces. |
+| **RoleBinding** | One namespace | Grants a Role **or ClusterRole** to subjects, within that namespace. |
+| **ClusterRoleBinding** | Cluster-wide | Grants a ClusterRole across the whole cluster. |
+
+RBAC is **additive only**: there are no "deny" rules. **Verbs:** `get`, `list`, `watch`, `create`, `update`, `patch`, `delete`, `deletecollection`, plus special ones like `impersonate`, `bind`, `escalate`.
+
+**Pod Security Standards** (enforced per namespace by Pod Security Admission via labels like `pod-security.kubernetes.io/enforce=restricted`)
+
+| Level | Meaning |
+|---|---|
+| **Privileged** | No restrictions. For system components. |
+| **Baseline** | Blocks known privilege escalations (no privileged containers, no hostPath, no host networking). |
+| **Restricted** | Hardened: must run as non-root, drop all capabilities, use seccomp. |
+
+**Modes:** `enforce` (reject) · `audit` (log) · `warn` (warn the user).
+
+**securityContext highlights:** `runAsNonRoot`, `runAsUser`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `capabilities.drop: ["ALL"]`, `seccompProfile`.
+
+**Policy engines** for custom rules: Kyverno · OPA Gatekeeper · built-in ValidatingAdmissionPolicy (CEL expressions).
+
+---
+
+## Organizing: Namespaces, Labels, Annotations
+
+| Concept | Purpose | Example |
+|---|---|---|
+| **Namespace** | Virtual cluster for isolation, quotas and RBAC scope | `dev`, `prod`, `team-a` |
+| **Label** | Key/value used to **select and group** objects | `app=web`, `env=prod` |
+| **Selector** | Query on labels (Services, Deployments, kubectl `-l` use them) | `app=web,tier!=db` |
+| **Annotation** | Key/value for **non-identifying metadata**; tools read it, selectors don't | `kubernetes.io/change-cause`, ingress controller settings |
+| **Field selector** | Query on object fields, not labels | `status.phase=Running` |
+| **Finalizer** | Blocks deletion until a controller finishes cleanup | Why namespaces/PVCs get stuck in `Terminating` |
+| **Owner reference** | Links child to parent for cascading deletion | Pod → ReplicaSet |
+
+**Default namespaces:** `default` · `kube-system` (cluster components) · `kube-public` (readable by all) · `kube-node-lease` (node heartbeats).
+
+**Cluster-scoped (not in any namespace):** Nodes, PersistentVolumes, StorageClasses, Namespaces, ClusterRoles, CRDs, IngressClasses, PriorityClasses. Check with `kubectl api-resources --namespaced=false`.
+
+**Recommended labels:** `app.kubernetes.io/name`, `app.kubernetes.io/instance`, `app.kubernetes.io/version`, `app.kubernetes.io/component`, `app.kubernetes.io/part-of`, `app.kubernetes.io/managed-by`.
+
+---
+
+## Extending Kubernetes
+
+| Concept | What it is |
+|---|---|
+| **CustomResourceDefinition (CRD)** | Adds a new object type to the API (e.g. `Certificate`, `Gateway`, `Prometheus`). |
+| **Custom Resource (CR)** | An instance of a CRD. |
+| **Controller** | A loop that watches objects and acts on them. |
+| **Operator** | A CRD plus a controller that encodes operational knowledge (e.g. a Postgres operator handles backups and failover). |
+| **Admission webhooks** | **Mutating** (change objects on create, e.g. inject sidecars) and **Validating** (accept/reject). |
+| **Aggregated API** | Extra API servers behind the main one (e.g. metrics-server serves `metrics.k8s.io`). |
+
+**Ecosystem worth knowing:** Helm (packaging) · Kustomize (overlays) · Argo CD / Flux (GitOps) · cert-manager (TLS certs) · Prometheus + Grafana (monitoring) · Istio / Linkerd (service mesh) · Velero (backup).
+
+---
+
+# Part 2 — Commands
 
 ## 1. Setup, Aliases & Autocompletion
 
@@ -657,6 +1130,17 @@ kubectl describe ingress <ing>                           # Ingress rules and bac
 kubectl get ingressclass                                 # Available ingress controllers
 kubectl get networkpolicy                                # List network policies
 kubectl describe networkpolicy <np>                      # Show policy rules
+
+# Gateway API (once its CRDs and an implementation are installed)
+kubectl get gatewayclass                                 # Available Gateway implementations
+kubectl get gateway -A                                   # Gateways (listeners) and their addresses
+kubectl describe gateway <gw>                            # Listener status and attached routes
+kubectl get httproute -A                                 # HTTP routing rules
+kubectl describe httproute <route>                       # Check if the route was accepted by the Gateway
+kubectl get grpcroute,tlsroute -A                        # Routes for other protocols
+kubectl get referencegrant -A                            # Cross-namespace reference permissions
+kubectl get crd | grep gateway.networking.k8s.io         # Is Gateway API installed?
+kubectl get pods -A -l app.kubernetes.io/name=ingress-nginx   # Are you still running retired ingress-nginx?
 
 # Port forwarding
 kubectl port-forward pod/<pod> 8080:80                   # localhost:8080 → pod port 80
@@ -1399,6 +1883,46 @@ spec:
 </details>
 
 <details>
+<summary><b>Gateway + HTTPRoute</b> — Gateway API routing with a canary split</summary>
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: web-gw
+spec:
+  gatewayClassName: <your-gateway-class>         # From: kubectl get gatewayclass
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: example.com
+      tls:
+        certificateRefs:
+          - name: web-tls                        # TLS certificate secret
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web
+spec:
+  parentRefs:
+    - name: web-gw                               # Attach to the Gateway above
+  hostnames: [example.com]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: web-v1                           # 90% of traffic
+          port: 80
+          weight: 90
+        - name: web-v2                           # 10% canary
+          port: 80
+          weight: 10
+```
+</details>
+
+<details>
 <summary><b>PersistentVolumeClaim</b> — request storage</summary>
 
 ```yaml
@@ -1505,6 +2029,9 @@ roleRef:
 - [kubectl reference](https://kubernetes.io/docs/reference/kubectl/)
 - [Official kubectl Quick Reference](https://kubernetes.io/docs/reference/kubectl/quick-reference/)
 - [JSONPath support](https://kubernetes.io/docs/reference/kubectl/jsonpath/)
+- [Kubernetes Concepts](https://kubernetes.io/docs/concepts/)
+- [Gateway API](https://gateway-api.sigs.k8s.io/)
+- [Ingress NGINX retirement announcement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/)
 - [Minikube docs](https://minikube.sigs.k8s.io/docs/)
 - [kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/)
 - [Helm docs](https://helm.sh/docs/)
