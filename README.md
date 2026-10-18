@@ -248,6 +248,129 @@ Services work at layer 4 (TCP/UDP). For **HTTP(S) routing** by hostname and path
 
 > ⚠️ The community **ingress-nginx** controller (the one in most tutorials) was **retired in March 2026**: no more releases or security fixes. Existing installs keep working. For new setups, use Gateway API or another maintained controller. To check whether you run it: `kubectl get pods -A -l app.kubernetes.io/name=ingress-nginx`. It is a different project from F5's NGINX Ingress Controller, which is still maintained.
 
+**Ingress routing patterns (types of Ingress)**
+
+| Pattern | What it does | Example |
+|---|---|---|
+| **Single service / default backend** | All traffic goes to one Service, no rules | Everything → `web` |
+| **Simple fanout** | **One host**, different **paths** → different Services | `shop.com/api` → `api`, `shop.com/` → `web` |
+| **Name-based virtual hosting** | **Different hosts** on the same IP → different Services | `api.shop.com` → `api`, `blog.shop.com` → `blog` |
+| **TLS termination** | HTTPS ends at the Ingress, plain HTTP to pods | Cert from a `kubernetes.io/tls` Secret |
+| **Wildcard host** | Match all subdomains | `*.shop.com` → `tenant-router` |
+| **Catch-all rule** | A rule with no `host` matches requests for any host | Fallback for unknown hosts |
+
+<details>
+<summary><b>Single service (default backend)</b></summary>
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: single
+spec:
+  ingressClassName: <class>
+  defaultBackend:                      # No rules: everything goes here
+    service: { name: web, port: { number: 80 } }
+```
+</details>
+
+<details>
+<summary><b>Simple fanout</b> — one host, many paths</summary>
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fanout
+spec:
+  ingressClassName: <class>
+  rules:
+    - host: shop.com
+      http:
+        paths:
+          - path: /api                 # shop.com/api/* → api
+            pathType: Prefix
+            backend: { service: { name: api, port: { number: 8080 } } }
+          - path: /images              # shop.com/images/* → images
+            pathType: Prefix
+            backend: { service: { name: images, port: { number: 80 } } }
+          - path: /                    # Everything else → web
+            pathType: Prefix
+            backend: { service: { name: web, port: { number: 80 } } }
+```
+
+> 💡 The longest matching path wins, so `/api` beats `/`. The request path is forwarded **unchanged**: the `api` Service receives `/api/users`, not `/users`. Stripping the prefix needs a controller-specific rewrite annotation (or a `URLRewrite` filter in Gateway API).
+</details>
+
+<details>
+<summary><b>Name-based virtual hosting</b> — many hosts, one IP</summary>
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vhosts
+spec:
+  ingressClassName: <class>
+  rules:
+    - host: api.shop.com               # Matched on the HTTP Host header
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: api, port: { number: 8080 } } }
+    - host: blog.shop.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: blog, port: { number: 80 } } }
+    - http:                            # No host = catch-all for any other hostname
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: default-site, port: { number: 80 } } }
+```
+</details>
+
+<details>
+<summary><b>TLS termination</b></summary>
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tls-example
+spec:
+  ingressClassName: <class>
+  tls:
+    - hosts: [api.shop.com, blog.shop.com]   # Hosts covered by the cert
+      secretName: shop-tls                   # kubernetes.io/tls Secret, same namespace
+  rules:
+    - host: api.shop.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: api, port: { number: 8080 } } }
+```
+
+> 💡 Ingress supports one TLS port (443) and terminates TLS. TLS passthrough (pod handles TLS itself) needs controller-specific options, or a `TLSRoute` in Gateway API. cert-manager can issue and renew the Secret automatically.
+</details>
+
+**Same patterns in Gateway API**
+
+| Ingress pattern | Gateway API equivalent |
+|---|---|
+| Default backend | `HTTPRoute` with one rule and no `matches` |
+| Simple fanout | One `HTTPRoute`, several `rules` with `PathPrefix` matches |
+| Name-based virtual hosting | Separate `HTTPRoute`s with different `hostnames` (or several listeners on the Gateway) |
+| TLS termination | Gateway listener with `protocol: HTTPS` and `certificateRefs` |
+| TLS passthrough | Listener `protocol: TLS` + `tls.mode: Passthrough` + `TLSRoute` |
+| Path rewrite | `URLRewrite` filter (standard, no annotations) |
+| Canary / weighted split | `backendRefs` with `weight` |
+| Header-based routing | `matches.headers` |
+
 **Gateway API** is the successor to Ingress. It splits responsibilities by role:
 
 | Resource | Owned by | Purpose |
@@ -890,8 +1013,18 @@ kubectl create serviceaccount app-sa                         # Create a service 
 kubectl create quota team-q --hard=cpu=4,memory=8Gi,pods=20  # Limit namespace resources
 kubectl create priorityclass high --value=1000 --description="high prio"   # Pod scheduling priority
 kubectl create poddisruptionbudget web-pdb --selector=app=web --min-available=2   # Protect during drains
-kubectl create ingress web --class=nginx --rule="example.com/*=web:80"            # HTTP ingress rule
-kubectl create ingress web --rule="example.com/api*=api:8080,tls=my-tls-secret"   # Ingress with TLS
+kubectl create ingress web --class=<class> --rule="example.com/*=web:80"          # Single host, all paths → web
+kubectl create ingress single --class=<class> --default-backend=web:80             # Default backend: everything → web
+kubectl create ingress fanout --class=<class> \
+  --rule="shop.com/api*=api:8080" --rule="shop.com/images*=images:80" \
+  --rule="shop.com/*=web:80"                                                       # Simple fanout: paths → services
+kubectl create ingress vhosts --class=<class> \
+  --rule="api.shop.com/*=api:8080" --rule="blog.shop.com/*=blog:80"                # Name-based virtual hosting
+kubectl create ingress secure --class=<class> \
+  --rule="api.shop.com/*=api:8080,tls=shop-tls"                                    # TLS termination with a Secret
+kubectl create ingress exact --class=<class> --rule="shop.com/health=web:80"       # No trailing * = Exact path match
+kubectl create ingress web --class=<class> --rule="shop.com/*=web:80" \
+  --annotation=<controller-annotation>=<value>                                     # Add controller-specific annotations
 kubectl create token <sa> --duration=1h                      # Short-lived token for a service account
 
 # From files
